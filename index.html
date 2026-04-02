@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d9488">
+  <title>PropertiKu — Manajemen Properti Sewa</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <svg class="header-logo" width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <path d="M16 2L3 13v15a2 2 0 002 2h8v-9h6v9h8a2 2 0 002-2V13L16 2z" fill="white" opacity="0.9"/>
+          <path d="M16 2L3 13h4l9-7.5L25 13h4L16 2z" fill="white"/>
+        </svg>
+        <h1 id="page-title">PropertiKu</h1>
+      </div>
+      <button class="btn-icon" id="btn-settings" onclick="showSettings()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <!-- Pages -->
+    <main class="main">
+      <!-- Dashboard Page -->
+      <section id="page-dashboard" class="page active">
+        <div id="greeting-container"></div>
+        <div class="card">
+          <h3 class="card-title">Cashflow Bulan Ini</h3>
+          <div class="cashflow-summary">
+            <div class="cashflow-item income">
+              <span class="cashflow-label"><span class="dot"></span> Pemasukan</span>
+              <span class="cashflow-value" id="cf-income">Rp 0</span>
+            </div>
+            <div class="cashflow-item expense">
+              <span class="cashflow-label"><span class="dot"></span> Pengeluaran</span>
+              <span class="cashflow-value" id="cf-expense">Rp 0</span>
+            </div>
+            <div class="cashflow-divider"></div>
+            <div class="cashflow-item net">
+              <span class="cashflow-label"><span class="dot"></span> Net Profit</span>
+              <span class="cashflow-value" id="cf-net">Rp 0</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Tagihan Mendatang</h3>
+          <div id="upcoming-dues" class="list-container">
+            <p class="empty-state">Belum ada data pembayaran</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Properti Saya</h3>
+          <div id="dashboard-properties" class="list-container">
+            <p class="empty-state">Belum ada properti</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tenants Page -->
+      <section id="page-tenants" class="page">
+        <div class="search-bar">
+          <input type="text" placeholder="Cari penyewa..." id="search-tenant" oninput="renderTenants()">
+        </div>
+        <div id="tenant-list" class="list-container"></div>
+      </section>
+
+      <!-- Payments Page -->
+      <section id="page-payments" class="page">
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="filterPayments('all', this)">Semua</button>
+          <button class="filter-tab" onclick="filterPayments('pending', this)">Belum Bayar</button>
+          <button class="filter-tab" onclick="filterPayments('paid', this)">Lunas</button>
+          <button class="filter-tab" onclick="filterPayments('overdue', this)">Nunggak</button>
+        </div>
+        <div id="payment-list" class="list-container"></div>
+      </section>
+
+      <!-- Units Page -->
+      <section id="page-units" class="page">
+        <div class="search-bar">
+          <input type="text" placeholder="Cari unit... (misal: 301, Deluxe)" id="search-unit" oninput="renderUnits()">
+        </div>
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="filterUnits('all', this)">Semua</button>
+          <button class="filter-tab" onclick="filterUnits('occupied', this)">Terisi</button>
+          <button class="filter-tab" onclick="filterUnits('vacant', this)">Kosong</button>
+        </div>
+        <div id="unit-list" class="list-container"></div>
+      </section>
+
+      <!-- Reports Page (Yield + Analytics + Multi-property) -->
+      <section id="page-reports" class="page">
+        <!-- Sub-tabs for reports -->
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="switchReportTab('overview', this)">Overview</button>
+          <button class="filter-tab" onclick="switchReportTab('yield', this)">Yield</button>
+          <button class="filter-tab" onclick="switchReportTab('analytics', this)">Occupancy</button>
+          <button class="filter-tab" onclick="switchReportTab('multi', this)">Per Properti</button>
+          <button class="filter-tab" onclick="switchReportTab('kpr', this)">KPR</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="rpt-tab-overview" class="rpt-tab active">
+          <div class="filter-tabs sub-filter">
+            <button class="filter-tab active" onclick="changeReportPeriod('month', this)">Bulanan</button>
+            <button class="filter-tab" onclick="changeReportPeriod('year', this)">Tahunan</button>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Ringkasan Keuangan</h3>
+            <div class="report-grid">
+              <div class="report-item"><span class="report-label">Pemasukan</span><span class="report-value income" id="rpt-income">Rp 0</span></div>
+              <div class="report-item"><span class="report-label">Pengeluaran</span><span class="report-value expense" id="rpt-expense">Rp 0</span></div>
+              <div class="report-item"><span class="report-label">Net Profit</span><span class="report-value" id="rpt-net">Rp 0</span></div>
+              <div class="report-item"><span class="report-label">Yield (ROI)</span><span class="report-value" id="rpt-yield">-</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">P&L Per Properti</h3>
+            <div id="report-per-property" class="list-container"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Riwayat Transaksi</h3>
+            <div id="report-transactions" class="list-container"></div>
+          </div>
+        </div>
+
+        <!-- Yield Calculator Tab -->
+        <div id="rpt-tab-yield" class="rpt-tab">
+          <div id="yield-content"></div>
+        </div>
+
+        <!-- Occupancy Analytics Tab -->
+        <div id="rpt-tab-analytics" class="rpt-tab">
+          <div id="analytics-content"></div>
+        </div>
+
+        <!-- Multi-property Tab -->
+        <div id="rpt-tab-multi" class="rpt-tab">
+          <div id="multi-content"></div>
+        </div>
+
+        <!-- KPR Simulator Tab -->
+        <div id="rpt-tab-kpr" class="rpt-tab">
+          <div id="kpr-content"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- FAB -->
+    <button class="fab" id="fab-main" onclick="toggleFabMenu()">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="fab-menu" id="fab-menu">
+      <button class="fab-option" onclick="showUnitForm(); closeFabMenu()">
+        <span class="fab-option-icon">🏠</span>
+        <span class="fab-option-label">Tambah Unit</span>
+      </button>
+      <button class="fab-option" onclick="showTenantForm(); closeFabMenu()">
+        <span class="fab-option-icon">👤</span>
+        <span class="fab-option-label">Tambah Penyewa</span>
+      </button>
+      <button class="fab-option" onclick="showPaymentForm(); closeFabMenu()">
+        <span class="fab-option-icon">💰</span>
+        <span class="fab-option-label">Catat Pembayaran</span>
+      </button>
+    </div>
+    <div class="fab-backdrop" id="fab-backdrop" onclick="closeFabMenu()"></div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="navigateTo('dashboard', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('tenants', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span>Penyewa</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('payments', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span>Bayar</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('units', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Unit</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('reports', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Laporan</span>
+      </button>
+    </nav>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3 id="modal-title">Form</h3>
+          <button class="btn-icon" onclick="closeModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        console.log('SW registered:', reg.scope);
+      }).catch((err) => {
+        console.log('SW registration failed:', err);
+      });
+    }
+  </script>
+</body>
+</html>
