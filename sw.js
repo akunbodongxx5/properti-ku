@@ -1,11 +1,13 @@
-const CACHE_NAME = 'propertiKu-v1';
+const CACHE_NAME = 'propertiKu-v2';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './styles.css',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // Install — cache app shell
