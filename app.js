@@ -103,6 +103,18 @@ function getPropertyAnnualCost(propData) {
   return (propData.pbb || 0) + (propData.maintenance || 0) + (propData.insurance || 0) + (propData.otherExpense || 0);
 }
 
+function getUnitMonthlyCost(unit) {
+  return (unit.ipl || 0) + (unit.sinkingFund || 0) + (unit.unitOtherCost || 0);
+}
+
+function getUnitAnnualCost(unit) {
+  return getUnitMonthlyCost(unit) * 12 + (unit.unitPbb || 0);
+}
+
+function getAllUnitsAnnualCost(units) {
+  return units.reduce((s, u) => s + getUnitAnnualCost(u), 0);
+}
+
 function getPropertyAnnualCostWithCicilan(propData) {
   return getPropertyAnnualCost(propData) + ((propData.cicilanPerBulan || 0) * 12);
 }
@@ -567,6 +579,22 @@ function showUnitForm(editId) {
         </select></div>
       <div class="form-group"><label class="form-label" id="price-label">Harga Sewa / ${u?.billingCycle==='yearly'?'Tahun':'Bulan'} (Rp)</label>
         <input class="form-input" name="price" type="number" required placeholder="1500000" value="${u?.price||''}"></div>
+      <div class="form-group" id="unit-costs-section">
+        <label class="form-label" style="margin-bottom:4px">💸 Biaya Tetap per Unit</label>
+        <small style="color:var(--text-muted);display:block;margin-bottom:10px">Untuk apartemen: IPL, sinking fund, dll. Kos-kosan bisa dikosongi (pakai biaya properti).</small>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">IPL / Service Charge (Rp/bln)</label>
+            <input class="form-input" name="ipl" type="number" placeholder="0" value="${u?.ipl||''}"></div>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Sinking Fund (Rp/bln)</label>
+            <input class="form-input" name="sinkingFund" type="number" placeholder="0" value="${u?.sinkingFund||''}"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">PBB Unit (Rp/thn)</label>
+            <input class="form-input" name="unitPbb" type="number" placeholder="0" value="${u?.unitPbb||''}"></div>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Biaya Lain (Rp/bln)</label>
+            <input class="form-input" name="unitOtherCost" type="number" placeholder="0" value="${u?.unitOtherCost||''}"></div>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Fasilitas</label>
         ${buildChipsHtml(_selectedFacilities)}</div>
       <div class="form-group"><label class="form-label">Status</label>
@@ -602,6 +630,8 @@ function saveUnit(e, editId) {
   const data = {
     id: editId || DB.genId(), property, subtype, name: f.name.value.trim(),
     type: f.type.value, price: newPrice, billingCycle: f.billingCycle.value,
+    ipl: Number(f.ipl.value) || 0, sinkingFund: Number(f.sinkingFund.value) || 0,
+    unitPbb: Number(f.unitPbb.value) || 0, unitOtherCost: Number(f.unitOtherCost.value) || 0,
     facilities: newFacilities, status: f.status.value,
     createdAt: editId ? (getUnits().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
@@ -734,6 +764,7 @@ function renderUnits() {
             </div>
             <div class="unit-item-right">
               <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?'thn':'bln'}</span></span>
+              ${getUnitMonthlyCost(u) > 0 ? `<div style="font-size:10px;color:var(--danger);font-weight:600;margin-top:2px">-${formatRp(getUnitMonthlyCost(u))}/bln</div>` : ''}
             </div>
             ${facs ? `<div class="unit-item-facs">${facs}${extraFacs > 0 ? `<span class="facility-tag fac-more">+${extraFacs}</span>` : ''}</div>` : ''}
           </div>`;
@@ -1299,8 +1330,11 @@ function renderYield() {
     const cy = getYear();
     const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
 
+    // Unit-level annual costs (IPL, sinking fund, PBB unit, etc.)
+    const unitsCost = getAllUnitsAnnualCost(pu);
+
     // Total annual expense (without cicilan — for pure yield)
-    const totalAnnualExpense = fixedCosts + recordedExpense;
+    const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
     // Total with cicilan — for real cashflow
     const totalWithCicilan = totalAnnualExpense + cicilanPerTahun;
 
@@ -1341,6 +1375,7 @@ function renderYield() {
         ${pd.insurance ? `<div class="yield-row sub"><span>Asuransi</span><span>${formatRp(pd.insurance)}</span></div>` : ''}
         ${pd.otherExpense ? `<div class="yield-row sub"><span>Lain-lain</span><span>${formatRp(pd.otherExpense)}</span></div>` : ''}
       ` : ''}
+      ${unitsCost > 0 ? `<div class="yield-row sub"><span>Biaya per-unit (IPL, dll)</span><span>${formatRp(unitsCost)}</span></div>` : ''}
       ${recordedExpense > 0 ? `<div class="yield-row sub"><span>Operasional (tercatat)</span><span>${formatRp(recordedExpense)}</span></div>` : ''}
       <div class="yield-row"><span>Total Pengeluaran/thn</span><span style="color:var(--danger);font-weight:700">${formatRp(totalAnnualExpense)}</span></div>
       ${cicilanPerBulan > 0 ? `
@@ -1464,7 +1499,8 @@ function renderMultiProperty() {
     const yearIncome = monthlyRent * 12;
     const cy = getYear();
     const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
-    const totalAnnualExpense = fixedCosts + recordedExpense;
+    const unitsCostMulti = getAllUnitsAnnualCost(pu);
+    const totalAnnualExpense = fixedCosts + unitsCostMulti + recordedExpense;
     const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(1) : '-';
     const netProfit = yearIncome - totalAnnualExpense;
     const paybackYears = purchasePrice > 0 && netProfit > 0 ? (purchasePrice / netProfit).toFixed(1) : '-';
@@ -2796,6 +2832,7 @@ function renderROICards() {
     const totalInvestment = pd.purchasePrice || 0;
     if (totalInvestment <= 0) return '';
 
+    const pu = units.filter(u => u.property === prop);
     const totalIncome = payments.filter(p => p.propertyName === prop && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
     const totalExpense = payments.filter(p => p.propertyName === prop && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
     const netProfit = totalIncome - totalExpense;
@@ -2805,7 +2842,8 @@ function renderROICards() {
     const allDates = payments.filter(p => p.propertyName === prop && p.createdAt).map(p => new Date(p.createdAt));
     const firstDate = allDates.length > 0 ? new Date(Math.min(...allDates)) : new Date();
     const monthsActive = Math.max(1, Math.round((new Date() - firstDate) / (30.44 * 24 * 60 * 60 * 1000)));
-    const avgMonthlyProfit = netProfit / monthsActive;
+    const monthlyUnitCosts = pu.reduce((s, u) => s + getUnitMonthlyCost(u), 0);
+    const avgMonthlyProfit = (netProfit / monthsActive) - monthlyUnitCosts;
     const projectedPaybackMonths = avgMonthlyProfit > 0 ? Math.round(totalInvestment / avgMonthlyProfit) : 0;
     const paybackLabel = projectedPaybackMonths > 0 ? (projectedPaybackMonths >= 24 ? (projectedPaybackMonths / 12).toFixed(1) + ' thn' : projectedPaybackMonths + ' bln') : '-';
 
