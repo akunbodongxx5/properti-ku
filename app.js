@@ -18,6 +18,37 @@ function formatRp(n) {
   return 'Rp ' + v.toLocaleString('id-ID');
 }
 function formatRpFull(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+
+// Number input formatting with thousand separator (dot)
+function formatNumDots(n) {
+  if (!n && n !== 0) return '';
+  return String(n).replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+function parseNum(s) {
+  if (typeof s === 'number') return s;
+  return Number(String(s).replace(/\./g, '').replace(/,/g, '')) || 0;
+}
+function initRpInputs(container) {
+  const root = container || document;
+  root.querySelectorAll('input[data-rp]').forEach(el => {
+    if (el._rpInit) return;
+    el._rpInit = true;
+    // Format initial value
+    if (el.value && !isNaN(Number(el.value))) el.value = formatNumDots(el.value);
+    el.addEventListener('input', function() {
+      const raw = this.value.replace(/\./g, '');
+      const pos = this.selectionStart;
+      const oldLen = this.value.length;
+      this.value = formatNumDots(raw);
+      const newLen = this.value.length;
+      this.setSelectionRange(pos + (newLen - oldLen), pos + (newLen - oldLen));
+    });
+  });
+}
+function getRpVal(name) {
+  const el = document.querySelector(`[name="${name}"]`) || document.getElementById(name);
+  return el ? parseNum(el.value) : 0;
+}
 function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); }
 function getMonthYear(d) { const x = d ? new Date(d) : new Date(); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`; }
 function getYear(d) { return d ? new Date(d).getFullYear().toString() : new Date().getFullYear().toString(); }
@@ -586,21 +617,21 @@ function showUnitForm(editId) {
           <option value="yearly" ${u?.billingCycle==='yearly'?'selected':''}>Per Tahun</option>
         </select></div>
       <div class="form-group"><label class="form-label" id="price-label">Harga Sewa / ${u?.billingCycle==='yearly'?'Tahun':'Bulan'} (Rp)</label>
-        <input class="form-input" name="price" type="number" required placeholder="1500000" value="${u?.price||''}"></div>
+        <input class="form-input" name="price" type="text" inputmode="numeric" data-rp required placeholder="1.500.000" value="${u?.price ? formatNumDots(u.price) : ''}"></div>
       <div class="form-group" id="unit-costs-section">
         <label class="form-label" style="margin-bottom:4px">💸 Biaya Tetap per Unit</label>
         <small style="color:var(--text-muted);display:block;margin-bottom:10px">Untuk apartemen: IPL, sinking fund, dll. Kos-kosan bisa dikosongi (pakai biaya properti).</small>
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">IPL / Service Charge (Rp/bln)</label>
-            <input class="form-input" name="ipl" type="number" placeholder="0" value="${u?.ipl||''}"></div>
+            <input class="form-input" name="ipl" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.ipl ? formatNumDots(u.ipl) : ''}"></div>
           <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Sinking Fund (Rp/bln)</label>
-            <input class="form-input" name="sinkingFund" type="number" placeholder="0" value="${u?.sinkingFund||''}"></div>
+            <input class="form-input" name="sinkingFund" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.sinkingFund ? formatNumDots(u.sinkingFund) : ''}"></div>
         </div>
         <div style="display:flex;gap:8px">
           <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">PBB Unit (Rp/thn)</label>
-            <input class="form-input" name="unitPbb" type="number" placeholder="0" value="${u?.unitPbb||''}"></div>
+            <input class="form-input" name="unitPbb" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.unitPbb ? formatNumDots(u.unitPbb) : ''}"></div>
           <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Biaya Lain (Rp/bln)</label>
-            <input class="form-input" name="unitOtherCost" type="number" placeholder="0" value="${u?.unitOtherCost||''}"></div>
+            <input class="form-input" name="unitOtherCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.unitOtherCost ? formatNumDots(u.unitOtherCost) : ''}"></div>
         </div>
       </div>
       <div class="form-group"><label class="form-label">Fasilitas</label>
@@ -616,6 +647,7 @@ function showUnitForm(editId) {
     </form>
     <script>document.querySelector('[name="billingCycle"]').addEventListener('change',function(){document.getElementById('price-label').textContent='Harga Sewa / '+(this.value==='yearly'?'Tahun':'Bulan')+' (Rp)'})<\/script>
   `);
+  setTimeout(() => initRpInputs(), 50);
 }
 
 function saveUnit(e, editId) {
@@ -633,13 +665,13 @@ function saveUnit(e, editId) {
   getOrCreateProperty(property);
 
   const newFacilities = _selectedFacilities.join(',');
-  const newPrice = Number(f.price.value);
+  const newPrice = parseNum(f.price.value);
 
   const data = {
     id: editId || DB.genId(), property, subtype, name: f.name.value.trim(),
     type: f.type.value, price: newPrice, billingCycle: f.billingCycle.value,
-    ipl: Number(f.ipl.value) || 0, sinkingFund: Number(f.sinkingFund.value) || 0,
-    unitPbb: Number(f.unitPbb.value) || 0, unitOtherCost: Number(f.unitOtherCost.value) || 0,
+    ipl: parseNum(f.ipl.value) || 0, sinkingFund: parseNum(f.sinkingFund.value) || 0,
+    unitPbb: parseNum(f.unitPbb.value) || 0, unitOtherCost: parseNum(f.unitOtherCost.value) || 0,
     facilities: newFacilities, status: f.status.value,
     createdAt: editId ? (getUnits().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
@@ -832,7 +864,7 @@ function showTenantForm(editId) {
         <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="31" placeholder="Auto: 1 hari sebelum mulai sewa" value="${defaultDueDay}">
         <small style="color:var(--text-muted);display:block;margin-top:4px">Tanggal jatuh tempo pembayaran sewa tiap bulan. Kosongkan = otomatis 1 hari sebelum tanggal mulai sewa.</small></div>
       <div class="form-group"><label class="form-label">Deposit (Rp)</label>
-        <input class="form-input" name="deposit" type="number" placeholder="0" value="${t?.deposit||''}"></div>
+        <input class="form-input" name="deposit" type="text" inputmode="numeric" data-rp placeholder="0" value="${t?.deposit ? formatNumDots(t.deposit) : ''}"></div>
       <div class="form-group"><label class="form-label">Catatan</label>
         <textarea class="form-textarea" name="notes" placeholder="Catatan...">${t?.notes||''}</textarea></div>
       <button type="submit" class="btn btn-primary">${t?'Simpan':'Tambah Penyewa'}</button>
@@ -844,6 +876,7 @@ function showTenantForm(editId) {
       </div>`:''}
     </form>
   `);
+  setTimeout(() => initRpInputs(), 50);
 }
 
 function onTenantStartDateChange(val) {
@@ -926,7 +959,7 @@ function saveTenant(e, editId) {
   const data = { id: editId || DB.genId(), name: f.name.value.trim(), phone: f.phone.value.trim(),
     unitId: f.unitId.value, startDate: f.startDate.value, endDate: f.endDate.value,
     dueDay: dueDayVal || calcDefaultDueDay(f.startDate.value),
-    deposit: Number(f.deposit.value)||0, notes: f.notes.value.trim(),
+    deposit: parseNum(f.deposit.value)||0, notes: f.notes.value.trim(),
     createdAt: editId ? (getTenants().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
   const tenants = getTenants();
@@ -1057,7 +1090,7 @@ function showPaymentForm(editId) {
         <select class="form-select" name="expenseUnitId"><option value="">Semua / Umum</option>
           ${units.map(u=>`<option value="${u.id}" ${p?.expenseUnitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Jumlah (Rp)</label>
-        <input class="form-input" name="amount" type="number" required placeholder="1500000" value="${p?.amount||''}"></div>
+        <input class="form-input" name="amount" type="text" inputmode="numeric" data-rp required placeholder="1.500.000" value="${p?.amount ? formatNumDots(p.amount) : ''}"></div>
       <div class="form-group"><label class="form-label">Periode</label>
         <input class="form-input" name="period" type="month" required value="${p?.period||getMonthYear()}"></div>
       <div class="form-group"><label class="form-label">Jatuh Tempo</label>
@@ -1073,6 +1106,7 @@ function showPaymentForm(editId) {
     </form>
     <script>togglePaymentFields('${p?.type||'income'}')<\/script>
   `);
+  setTimeout(() => initRpInputs(), 50);
 }
 
 function togglePaymentFields(type) {
@@ -1092,7 +1126,7 @@ function savePayment(e, editId) {
     if (t) { const u = getUnits().find(x=>x.id===t.unitId); if (u) pn = u.property; }
   }
   const data = { id: editId||DB.genId(), type, tenantId: type==='income'?f.tenantId.value:'', propertyName: pn,
-    amount: Number(f.amount.value), period: f.period.value, dueDate: f.dueDate.value,
+    amount: parseNum(f.amount.value), period: f.period.value, dueDate: f.dueDate.value,
     status: f.status.value, description: f.description.value.trim(),
     expenseCategory: type==='expense' ? (f.expenseCategory?.value || 'other') : '',
     expenseUnitId: type==='expense' ? (f.expenseUnitId?.value || '') : '',
@@ -1579,7 +1613,7 @@ function renderKPRSimulator() {
 
       <div class="kpr-section-title">💰 Harga & DP</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Harga Properti</label><input type="number" id="kpr-harga" value="${d.hargaProperti}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>Harga Properti</label><input type="text" inputmode="numeric" data-rp id="kpr-harga" value="${formatNumDots(d.hargaProperti)}" oninput="calcKPR()"></div>
         <div class="kpr-field"><label>DP (%)</label><input type="number" id="kpr-dp" value="${d.dp}" step="5" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
@@ -1598,15 +1632,15 @@ function renderKPRSimulator() {
       <div class="kpr-section-title">🧾 Biaya Akad (One-Time)</div>
       <div class="kpr-row">
         <div class="kpr-field"><label>Provisi (%)</label><input type="number" id="kpr-provisi" value="${d.provisi}" step="0.1" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Admin (Rp)</label><input type="number" id="kpr-admin" value="${d.adminFee}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>Admin (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-admin" value="${formatNumDots(d.adminFee)}" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Appraisal (Rp)</label><input type="number" id="kpr-appraisal" value="${d.appraisal}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>Appraisal (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-appraisal" value="${formatNumDots(d.appraisal)}" oninput="calcKPR()"></div>
         <div class="kpr-field"><label>Notaris (%)</label><input type="number" id="kpr-notaris" value="${d.notaris}" step="0.1" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
         <div class="kpr-field"><label>BPHTB (%)</label><input type="number" id="kpr-bphtb" value="${d.bphtbRate}" step="0.5" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>NJOPTKP (Rp)</label><input type="number" id="kpr-njoptkp" value="${d.njoptkp}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>NJOPTKP (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-njoptkp" value="${formatNumDots(d.njoptkp)}" oninput="calcKPR()"></div>
       </div>
 
       <div class="kpr-section-title">🛡 Asuransi (% / tahun)</div>
@@ -1617,7 +1651,7 @@ function renderKPRSimulator() {
 
       <div class="kpr-section-title">📈 Proyeksi Kenaikan Sewa</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Sewa saat ini (Rp/bln)</label><input type="number" id="kpr-sewa-awal" value="${d.sewaAwal}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>Sewa saat ini (Rp/bln)</label><input type="text" inputmode="numeric" data-rp id="kpr-sewa-awal" value="${formatNumDots(d.sewaAwal)}" oninput="calcKPR()"></div>
         <div class="kpr-field"><label>Naik tiap (tahun)</label><input type="number" id="kpr-rent-freq" value="${d.rentFreq}" min="1" max="5" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
@@ -1631,23 +1665,24 @@ function renderKPRSimulator() {
     <div id="kpr-results"></div>
   `;
 
+  setTimeout(() => initRpInputs(document.getElementById('kpr-content')), 50);
   calcKPR();
 }
 
 function kprSelectProperty(propName) {
   if (!propName) return;
   const pd = getPropertyData(propName);
-  if (pd.purchasePrice) document.getElementById('kpr-harga').value = pd.purchasePrice;
+  if (pd.purchasePrice) document.getElementById('kpr-harga').value = formatNumDots(pd.purchasePrice);
   // Fill rent from property units
   const propUnits = getUnits().filter(u => u.property === propName);
   const potentialRent = propUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
-  if (potentialRent > 0) document.getElementById('kpr-sewa-awal').value = potentialRent;
+  if (potentialRent > 0) document.getElementById('kpr-sewa-awal').value = formatNumDots(potentialRent);
   _kprState = { ..._kprState, selectedProperty: propName };
   calcKPR();
 }
 
 function calcKPR() {
-  const v = id => Number(document.getElementById(id)?.value || 0);
+  const v = id => { const el = document.getElementById(id); return el && el.hasAttribute('data-rp') ? parseNum(el.value) : Number(el?.value || 0); };
 
   const harga = v('kpr-harga');
   const dpPct = v('kpr-dp');
@@ -2038,22 +2073,22 @@ function showPropertySettings(propName) {
         <input class="form-input" name="ownerKTP" value="${pd.ownerKTP||''}" placeholder="No. KTP / NIK"></div>
       <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">Harga Beli / Investasi Awal (Rp)</label>
-        <input class="form-input" name="purchasePrice" type="number" placeholder="500000000" value="${pd.purchasePrice||''}">
+        <input class="form-input" name="purchasePrice" type="text" inputmode="numeric" data-rp placeholder="500.000.000" value="${pd.purchasePrice ? formatNumDots(pd.purchasePrice) : ''}">
         <small style="color:var(--text-muted);font-size:12px">Total harga beli properti (tanah + bangunan)</small></div>
       <div class="form-group"><label class="form-label">PBB / Tahun (Rp)</label>
-        <input class="form-input" name="pbb" type="number" placeholder="2000000" value="${pd.pbb||''}">
+        <input class="form-input" name="pbb" type="text" inputmode="numeric" data-rp placeholder="2.000.000" value="${pd.pbb ? formatNumDots(pd.pbb) : ''}">
         <small style="color:var(--text-muted);font-size:12px">Pajak Bumi & Bangunan tahunan</small></div>
       <div class="form-group"><label class="form-label">Biaya Maintenance / Tahun (Rp)</label>
-        <input class="form-input" name="maintenance" type="number" placeholder="5000000" value="${pd.maintenance||''}">
+        <input class="form-input" name="maintenance" type="text" inputmode="numeric" data-rp placeholder="5.000.000" value="${pd.maintenance ? formatNumDots(pd.maintenance) : ''}">
         <small style="color:var(--text-muted);font-size:12px">Renovasi, perbaikan, perawatan gedung</small></div>
       <div class="form-group"><label class="form-label">Asuransi / Tahun (Rp)</label>
-        <input class="form-input" name="insurance" type="number" placeholder="0" value="${pd.insurance||''}"></div>
+        <input class="form-input" name="insurance" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.insurance ? formatNumDots(pd.insurance) : ''}"></div>
       <div class="form-group"><label class="form-label">Biaya Lain-lain / Tahun (Rp)</label>
-        <input class="form-input" name="otherExpense" type="number" placeholder="0" value="${pd.otherExpense||''}">
+        <input class="form-input" name="otherExpense" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.otherExpense ? formatNumDots(pd.otherExpense) : ''}">
         <small style="color:var(--text-muted);font-size:12px">Listrik induk, kebersihan, keamanan, dll</small></div>
       <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">🏦 Cicilan Bank / Bulan (Rp)</label>
-        <input class="form-input" name="cicilanPerBulan" type="number" placeholder="0" value="${pd.cicilanPerBulan||''}">
+        <input class="form-input" name="cicilanPerBulan" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.cicilanPerBulan ? formatNumDots(pd.cicilanPerBulan) : ''}">
         <small style="color:var(--text-muted);font-size:12px">Angsuran KPR bulanan (pokok + bunga)</small></div>
       <div class="form-group"><label class="form-label">Sisa Tenor (bulan)</label>
         <input class="form-input" name="sisaTenor" type="number" placeholder="0" value="${pd.sisaTenor||''}">
@@ -2066,6 +2101,7 @@ function showPropertySettings(propName) {
     <div class="prop-settings-divider"></div>
     <button class="btn btn-danger" onclick="deleteProperty('${esc(propName)}')">🗑️ Hapus Properti & Semua Unit</button>
   `);
+  setTimeout(() => initRpInputs(), 50);
 }
 
 function savePropertySettings(e, oldPropName) {
@@ -2106,12 +2142,12 @@ function savePropertySettings(e, oldPropName) {
   prop.ownerName = f.ownerName.value.trim();
   prop.ownerAddress = f.ownerAddress.value.trim();
   prop.ownerKTP = f.ownerKTP.value.trim();
-  prop.purchasePrice = Number(f.purchasePrice.value) || 0;
-  prop.pbb = Number(f.pbb.value) || 0;
-  prop.maintenance = Number(f.maintenance.value) || 0;
-  prop.insurance = Number(f.insurance.value) || 0;
-  prop.otherExpense = Number(f.otherExpense.value) || 0;
-  prop.cicilanPerBulan = Number(f.cicilanPerBulan.value) || 0;
+  prop.purchasePrice = parseNum(f.purchasePrice.value) || 0;
+  prop.pbb = parseNum(f.pbb.value) || 0;
+  prop.maintenance = parseNum(f.maintenance.value) || 0;
+  prop.insurance = parseNum(f.insurance.value) || 0;
+  prop.otherExpense = parseNum(f.otherExpense.value) || 0;
+  prop.cicilanPerBulan = parseNum(f.cicilanPerBulan.value) || 0;
   prop.sisaTenor = Number(f.sisaTenor.value) || 0;
   prop.notes = f.notes.value.trim();
   saveProperties(props);
@@ -2225,7 +2261,7 @@ function showBulkAddForm(propName) {
       </div>
 
       <div class="form-group"><label class="form-label">Harga Sewa / Bulan (Rp)</label>
-        <input class="form-input" name="price" type="number" id="bulk-price" placeholder="1500000" value="0">
+        <input class="form-input" name="price" type="text" inputmode="numeric" data-rp id="bulk-price" placeholder="1.500.000" value="0">
       </div>
 
       <div class="form-group"><label class="form-label">Status Awal</label>
@@ -2246,13 +2282,14 @@ function showBulkAddForm(propName) {
       document.querySelector('[name="skipNums"]').addEventListener('input', previewBulk);
     </script>
   `);
+  setTimeout(() => initRpInputs(), 50);
 }
 
 function onBulkSubtypeChange(val, propName) {
   document.getElementById('bulk-new-subtype').style.display = val === '__new__' ? 'block' : 'none';
   if (val && val !== '__new__') {
     const tpl = getSubtypeTemplate(propName, val);
-    if (tpl?.price) document.getElementById('bulk-price').value = tpl.price;
+    if (tpl?.price) document.getElementById('bulk-price').value = formatNumDots(tpl.price);
   }
 }
 
@@ -2291,7 +2328,7 @@ function saveBulkUnits(e, propName) {
   const start = Number(f.startNum.value);
   const end = Number(f.endNum.value);
   const prefix = f.prefix.value.trim();
-  const price = Number(f.price.value) || 0;
+  const price = parseNum(f.price.value) || 0;
   const status = f.status.value;
   const skipStr = f.skipNums?.value || '';
   const skipNums = skipStr.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
