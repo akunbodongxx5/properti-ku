@@ -1,4 +1,4 @@
-const CACHE_NAME = 'propertiKu-v2';
+const CACHE_NAME = 'propertiKu-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -30,23 +30,23 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch — cache-first for cached assets, network-first for others
+// Fetch — network-first, fallback to cache (ensures updates are picked up)
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Cache-first for same-origin cached assets
   if (url.origin === location.origin) {
     e.respondWith(
-      caches.match(e.request).then((cached) => {
-        if (cached) return cached;
-        // Network-first for non-cached resources
-        return fetch(e.request).then((response) => {
-          return response;
-        }).catch(() => cached);
+      fetch(e.request).then((response) => {
+        // Update cache with fresh response
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        return response;
+      }).catch(() => {
+        // Offline fallback to cache
+        return caches.match(e.request);
       })
     );
   } else {
-    // Network-first for external resources
     e.respondWith(
       fetch(e.request).catch(() => caches.match(e.request))
     );

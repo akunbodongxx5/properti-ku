@@ -174,6 +174,48 @@ const FACILITY_OPTIONS = [
   ]},
 ];
 
+// ===== EXPENSE CATEGORIES =====
+const EXPENSE_CATEGORIES = [
+  { id: 'maintenance', icon: '\u{1F527}', label: 'Maintenance' },
+  { id: 'tax', icon: '\u{1F3DB}\uFE0F', label: 'Pajak (PBB)' },
+  { id: 'electricity', icon: '\u26A1', label: 'Listrik' },
+  { id: 'water', icon: '\u{1F4A7}', label: 'Air / PDAM' },
+  { id: 'security', icon: '\u{1F46E}', label: 'Keamanan' },
+  { id: 'cleaning', icon: '\u{1F9F9}', label: 'Kebersihan' },
+  { id: 'insurance', icon: '\u{1F6E1}\uFE0F', label: 'Asuransi' },
+  { id: 'renovation', icon: '\u{1F3D7}\uFE0F', label: 'Renovasi' },
+  { id: 'other', icon: '\u{1F4E6}', label: 'Lain-lain' }
+];
+
+function getExpenseCategoryLabel(id) {
+  const cat = EXPENSE_CATEGORIES.find(c => c.id === id);
+  return cat ? cat.icon + ' ' + cat.label : '\u{1F4E6} Lain-lain';
+}
+
+// ===== TENANT HISTORY =====
+function getTenantHistory() { return DB.get('tenantHistory'); }
+function saveTenantHistory(h) { DB.set('tenantHistory', h); }
+
+// ===== UNIT PHOTOS =====
+function getUnitPhotos() { return DB.get('unitPhotos'); }
+function saveUnitPhotos(p) { DB.set('unitPhotos', p); }
+
+// ===== THEME =====
+function getTheme() { return DB.getVal('theme') || 'light'; }
+function setTheme(theme) {
+  DB.setVal('theme', theme);
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = theme === 'dark' ? '#0f172a' : '#0d9488';
+}
+function toggleTheme() {
+  const newTheme = getTheme() === 'light' ? 'dark' : 'light';
+  setTheme(newTheme);
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = newTheme === 'dark' ? '\u2600\uFE0F' : '\u{1F319}';
+  refreshCurrentPage();
+}
+
 let _selectedFacilities = [];
 
 function toggleChip(id) {
@@ -203,6 +245,142 @@ function buildChipsHtml(selected) {
   });
   html += '</div>';
   return html;
+}
+
+// ===== TERBILANG (Number to Indonesian words) =====
+function terbilang(n) {
+  if (n === 0) return 'nol';
+  const satuan = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+  n = Math.abs(Math.floor(n));
+  if (n < 12) return satuan[n];
+  if (n < 20) return satuan[n - 10] + ' belas';
+  if (n < 100) return satuan[Math.floor(n / 10)] + ' puluh' + (n % 10 ? ' ' + satuan[n % 10] : '');
+  if (n < 200) return 'seratus' + (n - 100 > 0 ? ' ' + terbilang(n - 100) : '');
+  if (n < 1000) return satuan[Math.floor(n / 100)] + ' ratus' + (n % 100 ? ' ' + terbilang(n % 100) : '');
+  if (n < 2000) return 'seribu' + (n - 1000 > 0 ? ' ' + terbilang(n - 1000) : '');
+  if (n < 1000000) return terbilang(Math.floor(n / 1000)) + ' ribu' + (n % 1000 ? ' ' + terbilang(n % 1000) : '');
+  if (n < 1000000000) return terbilang(Math.floor(n / 1000000)) + ' juta' + (n % 1000000 ? ' ' + terbilang(n % 1000000) : '');
+  if (n < 1000000000000) return terbilang(Math.floor(n / 1000000000)) + ' miliar' + (n % 1000000000 ? ' ' + terbilang(n % 1000000000) : '');
+  return terbilang(Math.floor(n / 1000000000000)) + ' triliun' + (n % 1000000000000 ? ' ' + terbilang(n % 1000000000000) : '');
+}
+
+// ===== SVG CHART HELPERS =====
+function svgLineChart(data, options) {
+  const { width = 300, height = 180, color = 'var(--primary)', label = '' } = options || {};
+  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  const padL = 50, padR = 20, padT = 20, padB = 40;
+  const w = width - padL - padR, h = height - padT - padB;
+  const maxVal = Math.max(...data.map(d => d.value), 1);
+  const minVal = Math.min(...data.map(d => d.value), 0);
+  const range = maxVal - minVal || 1;
+  const points = data.map((d, i) => {
+    const x = padL + (data.length > 1 ? (i / (data.length - 1)) * w : w / 2);
+    const y = padT + h - ((d.value - minVal) / range) * h;
+    return `${x},${y}`;
+  });
+  const labels = data.map((d, i) => {
+    const x = padL + (data.length > 1 ? (i / (data.length - 1)) * w : w / 2);
+    return `<text x="${x}" y="${height - 5}" text-anchor="middle" fill="currentColor" font-size="10">${d.label}</text>`;
+  }).join('');
+  // Y axis labels
+  const yLabels = [0, 0.5, 1].map(f => {
+    const val = minVal + f * range;
+    const y = padT + h - f * h;
+    return `<text x="${padL - 5}" y="${y + 4}" text-anchor="end" fill="currentColor" font-size="9">${formatRp(val)}</text><line x1="${padL}" y1="${y}" x2="${padL + w}" y2="${y}" stroke="currentColor" stroke-opacity="0.1"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;color:var(--text-secondary)">
+    ${yLabels}${labels}
+    <polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${data.map((d, i) => {
+      const x = padL + (data.length > 1 ? (i / (data.length - 1)) * w : w / 2);
+      const y = padT + h - ((d.value - minVal) / range) * h;
+      return `<circle cx="${x}" cy="${y}" r="4" fill="${color}"/>`;
+    }).join('')}
+  </svg>`;
+}
+
+function svgDonutChart(data, options) {
+  const { size = 200 } = options || {};
+  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return '<div class="empty-state">Belum ada data</div>';
+  const colors = ['#0d9488', '#6366f1', '#d97706', '#e11d48', '#7c3aed', '#059669', '#2563eb', '#c026d3', '#ca8a04'];
+  const cx = size / 2, cy = size / 2, r = size * 0.35;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = data.map((d, i) => {
+    const pct = d.value / total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    const o = offset;
+    offset += dash;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="${size * 0.12}" stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${-o}" transform="rotate(-90 ${cx} ${cy})"/>`;
+  }).join('');
+  const legend = data.map((d, i) => {
+    const pct = ((d.value / total) * 100).toFixed(1);
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px"><span style="width:10px;height:10px;border-radius:3px;background:${colors[i % colors.length]};flex-shrink:0"></span><span style="flex:1;color:var(--text-secondary)">${d.label}</span><span style="font-weight:700;color:var(--text)">${pct}%</span></div>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px;flex-shrink:0">
+      ${arcs}
+      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-size="${size * 0.1}" font-weight="800">${formatRp(total)}</text>
+    </svg>
+    <div style="flex:1;min-width:120px">${legend}</div>
+  </div>`;
+}
+
+function svgBarChart(data, options) {
+  const { width = 300, height = 200, colors = ['var(--success)', 'var(--danger)'], labels = ['Income', 'Expense'] } = options || {};
+  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  const padL = 50, padR = 20, padT = 20, padB = 50;
+  const w = width - padL - padR, h = height - padT - padB;
+  const maxVal = Math.max(...data.flatMap(d => d.values), 1);
+  const barGroupW = w / data.length;
+  const barW = Math.min(barGroupW * 0.35, 30);
+  const bars = data.map((d, i) => {
+    const gx = padL + i * barGroupW + barGroupW / 2;
+    return d.values.map((v, vi) => {
+      const bh = (v / maxVal) * h;
+      const x = gx - barW + vi * barW;
+      const y = padT + h - bh;
+      return `<rect x="${x}" y="${y}" width="${barW - 2}" height="${bh}" fill="${colors[vi]}" rx="3"/>`;
+    }).join('') + `<text x="${gx}" y="${height - 5}" text-anchor="middle" fill="currentColor" font-size="9" transform="rotate(-20 ${gx} ${height - 5})">${d.label.length > 10 ? d.label.slice(0, 10) + '..' : d.label}</text>`;
+  }).join('');
+  const legendHtml = labels.map((l, i) => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;margin-right:10px"><span style="width:8px;height:8px;border-radius:2px;background:${colors[i]}"></span>${l}</span>`).join('');
+  return `<div style="margin-bottom:4px">${legendHtml}</div><svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;color:var(--text-secondary)">${bars}</svg>`;
+}
+
+// ===== RESIZE IMAGE =====
+function resizeImage(base64, maxSize, quality) {
+  maxSize = maxSize || 800;
+  quality = quality || 0.6;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = base64;
+  });
+}
+
+// ===== STORAGE USAGE =====
+function getStorageUsage() {
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('propertiKu_')) {
+      total += localStorage.getItem(key).length * 2; // UTF-16
+    }
+  }
+  return (total / (1024 * 1024)).toFixed(2);
 }
 
 // ===== UNIT MANAGEMENT =====
@@ -328,6 +506,22 @@ function autoFillPrice() {
   }
 }
 
+function buildUnitPhotoSection(unitId) {
+  const photos = getUnitPhotos().filter(p => p.unitId === unitId);
+  let thumbs = photos.map(ph => {
+    return '<div style="position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">'
+      + '<img src="' + ph.data + '" style="width:100%;height:100%;object-fit:cover" onclick="showUnitPhotos(\'' + unitId + '\')">'
+      + '<button type="button" onclick="event.stopPropagation();deleteUnitPhoto(\'' + ph.id + '\',\'' + unitId + '\')" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center">&times;</button>'
+      + '</div>';
+  }).join('');
+  const addBtn = photos.length < 5
+    ? '<button type="button" class="btn btn-outline" onclick="addUnitPhoto(\'' + unitId + '\')" style="font-size:13px">📷 Tambah Foto</button>'
+    : '<small style="color:var(--text-muted)">Maksimal 5 foto tercapai</small>';
+  return '<div class="form-group"><label class="form-label">📷 Foto Unit (maks 5)</label>'
+    + '<div id="unit-photo-thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' + thumbs + '</div>'
+    + addBtn + '</div>';
+}
+
 function showUnitForm(editId) {
   const units = getUnits();
   const u = editId ? units.find(x => x.id === editId) : null;
@@ -380,6 +574,7 @@ function showUnitForm(editId) {
           <option value="vacant" ${u?.status==='vacant'?'selected':''}>Kosong</option>
           <option value="occupied" ${u?.status==='occupied'?'selected':''}>Terisi</option>
         </select></div>
+      ${u ? buildUnitPhotoSection(editId) : ''}
       <button type="submit" class="btn btn-primary">${u?'Simpan':'Tambah Unit'}</button>
       ${u?`<div class="btn-group"><button type="button" class="btn btn-danger" onclick="deleteUnit('${editId}')">Hapus</button></div>`:''}
     </form>
@@ -527,11 +722,15 @@ function renderUnits() {
           const extraFacs = u.facilities ? u.facilities.split(',').filter(Boolean).length - 4 : 0;
           const floorColor = getFloorColor(u.name);
           const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="Lantai"></span>` : '';
+          const hasPhotos = getUnitPhotos().some(p => p.unitId === u.id);
+          const hasHistory = getTenantHistory().some(h => h.unitId === u.id);
           return `<div class="unit-item" onclick="showUnitForm('${u.id}')">
             <div class="unit-item-left">
               ${floorDot}
               <span class="unit-item-name">${u.name}</span>
               <span class="badge badge-sm ${u.status === 'occupied' ? 'badge-success' : 'badge-warning'}">${u.status === 'occupied' ? 'Terisi' : 'Kosong'}</span>
+              ${hasPhotos ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitPhotos(\'' + u.id + '\')" title="Lihat Foto">📷</span>' : ''}
+              ${hasHistory ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitHistory(\'' + u.id + '\')" title="Riwayat Penyewa">📜</span>' : ''}
             </div>
             <div class="unit-item-right">
               <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?'thn':'bln'}</span></span>
@@ -601,6 +800,8 @@ function showTenantForm(editId) {
       <button type="submit" class="btn btn-primary">${t?'Simpan':'Tambah Penyewa'}</button>
       ${t?`<div class="btn-group">
         <button type="button" class="btn btn-outline" onclick="regeneratePayments('${editId}')">🔄 Regenerate Tagihan</button>
+        <button type="button" class="btn btn-outline" onclick="downloadContract('${editId}')">📄 Buat Kontrak</button>
+        <button type="button" class="btn btn-warning" onclick="archiveTenant('${editId}')">📦 Akhiri Kontrak</button>
         <button type="button" class="btn btn-danger" onclick="deleteTenant('${editId}')">Hapus</button>
       </div>`:''}
     </form>
@@ -787,9 +988,18 @@ function renderTenants() {
 // ===== PAYMENT TRACKING =====
 let paymentFilter = 'all';
 
+function showExpenseForm() {
+  showPaymentForm();
+  setTimeout(() => {
+    const typeSelect = document.querySelector('[name="type"]');
+    if (typeSelect) { typeSelect.value = 'expense'; togglePaymentFields('expense'); }
+  }, 100);
+}
+
 function showPaymentForm(editId) {
   const payments = getPayments(), p = editId ? payments.find(x=>x.id===editId) : null;
   const tenants = getTenants(), units = getUnits();
+  const expCat = p?.expenseCategory || 'other';
   openModal(p ? 'Edit Pembayaran' : 'Catat Pembayaran', `
     <form onsubmit="savePayment(event,'${editId||''}')">
       <div class="form-group"><label class="form-label">Tipe</label>
@@ -802,6 +1012,12 @@ function showPaymentForm(editId) {
       <div class="form-group" id="fg-property"><label class="form-label">Properti</label>
         <select class="form-select" name="propertyName"><option value="">Pilih...</option>
           ${[...new Set(units.map(u=>u.property))].map(pr=>`<option value="${pr}" ${p?.propertyName===pr?'selected':''}>${pr}</option>`).join('')}</select></div>
+      <div class="form-group" id="fg-expense-category" style="display:none"><label class="form-label">Kategori Pengeluaran</label>
+        <select class="form-select" name="expenseCategory">
+          ${EXPENSE_CATEGORIES.map(c=>`<option value="${c.id}" ${expCat===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
+      <div class="form-group" id="fg-expense-unit" style="display:none"><label class="form-label">Unit (opsional, untuk pengeluaran spesifik unit)</label>
+        <select class="form-select" name="expenseUnitId"><option value="">Semua / Umum</option>
+          ${units.map(u=>`<option value="${u.id}" ${p?.expenseUnitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Jumlah (Rp)</label>
         <input class="form-input" name="amount" type="number" required placeholder="1500000" value="${p?.amount||''}"></div>
       <div class="form-group"><label class="form-label">Periode</label>
@@ -823,8 +1039,11 @@ function showPaymentForm(editId) {
 
 function togglePaymentFields(type) {
   const a = document.getElementById('fg-tenant'), b = document.getElementById('fg-property');
+  const c = document.getElementById('fg-expense-category'), d = document.getElementById('fg-expense-unit');
   if (a) a.style.display = type==='income'?'block':'none';
   if (b) b.style.display = type==='expense'?'block':'none';
+  if (c) c.style.display = type==='expense'?'block':'none';
+  if (d) d.style.display = type==='expense'?'block':'none';
 }
 
 function savePayment(e, editId) {
@@ -837,6 +1056,8 @@ function savePayment(e, editId) {
   const data = { id: editId||DB.genId(), type, tenantId: type==='income'?f.tenantId.value:'', propertyName: pn,
     amount: Number(f.amount.value), period: f.period.value, dueDate: f.dueDate.value,
     status: f.status.value, description: f.description.value.trim(),
+    expenseCategory: type==='expense' ? (f.expenseCategory?.value || 'other') : '',
+    expenseUnitId: type==='expense' ? (f.expenseUnitId?.value || '') : '',
     createdAt: editId?(getPayments().find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
   };
   if (data.status==='pending' && daysUntil(data.dueDate)<0) data.status='overdue';
@@ -901,7 +1122,7 @@ function renderPayments() {
       <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
         ${toggleBtn}
         <div style="flex:1;min-width:0">
-          <div class="list-item-header"><span class="list-item-title">${isExp?'💸':'💰'} ${isExp?'Pengeluaran':(t?.name||'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
+          <div class="list-item-header"><span class="list-item-title">${isExp ? getExpenseCategoryLabel(p.expenseCategory || 'other') : '💰'} ${isExp?'':(t?.name||'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
           <div class="list-item-subtitle">${p.propertyName||'-'} · ${p.description||'Sewa '+p.period}</div>
           <div class="list-item-row" style="margin-top:6px">
             <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
@@ -949,6 +1170,9 @@ function renderDashboard() {
     return `<div class="due-item"><div class="due-info"><span class="due-name">${t?.name||'Pengeluaran'}</span><span class="due-detail">${p.propertyName||'-'} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
   }).join('');
 
+  // ROI Cards
+  renderROICards();
+
   // Properties
   const props = [...new Set(units.map(u=>u.property))];
   const pc = document.getElementById('dashboard-properties');
@@ -992,6 +1216,7 @@ function renderReports() {
   else if (reportTab === 'analytics') renderAnalytics();
   else if (reportTab === 'multi') renderMultiProperty();
   else if (reportTab === 'kpr') renderKPRSimulator();
+  else if (reportTab === 'charts') renderCharts();
 }
 
 function renderOverview() {
@@ -1762,6 +1987,13 @@ function showPropertySettings(propName) {
         <small style="color:var(--text-muted);font-size:12px">Ubah nama properti ini</small></div>
       ${subtypeHtml}
       <div class="prop-settings-divider"></div>
+      <div class="form-group"><label class="form-label">Nama Pemilik</label>
+        <input class="form-input" name="ownerName" value="${pd.ownerName||''}" placeholder="Nama lengkap pemilik"></div>
+      <div class="form-group"><label class="form-label">Alamat Pemilik</label>
+        <input class="form-input" name="ownerAddress" value="${pd.ownerAddress||''}" placeholder="Alamat lengkap"></div>
+      <div class="form-group"><label class="form-label">No. KTP Pemilik</label>
+        <input class="form-input" name="ownerKTP" value="${pd.ownerKTP||''}" placeholder="No. KTP / NIK"></div>
+      <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">Harga Beli / Investasi Awal (Rp)</label>
         <input class="form-input" name="purchasePrice" type="number" placeholder="500000000" value="${pd.purchasePrice||''}">
         <small style="color:var(--text-muted);font-size:12px">Total harga beli properti (tanah + bangunan)</small></div>
@@ -1828,6 +2060,9 @@ function savePropertySettings(e, oldPropName) {
     prop.name = newPropName;
   }
 
+  prop.ownerName = f.ownerName.value.trim();
+  prop.ownerAddress = f.ownerAddress.value.trim();
+  prop.ownerKTP = f.ownerKTP.value.trim();
   prop.purchasePrice = Number(f.purchasePrice.value) || 0;
   prop.pbb = Number(f.pbb.value) || 0;
   prop.maintenance = Number(f.maintenance.value) || 0;
@@ -2099,7 +2334,28 @@ async function sendTelegramReminder() {
 // ===== SETTINGS =====
 function showSettings() {
   const cfg = getTelegramConfig();
+  const isDark = getTheme() === 'dark';
   openModal('Pengaturan', `
+    <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">🌙 Mode Gelap</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <label style="position:relative;display:inline-block;width:50px;height:28px;cursor:pointer">
+          <input type="checkbox" ${isDark ? 'checked' : ''} onchange="toggleTheme();showSettings()" style="opacity:0;width:0;height:0">
+          <span style="position:absolute;inset:0;background:${isDark ? 'var(--primary)' : 'var(--border)'};border-radius:28px;transition:0.3s"></span>
+          <span style="position:absolute;top:3px;left:${isDark ? '25px' : '3px'};width:22px;height:22px;background:white;border-radius:50%;transition:0.3s"></span>
+        </label>
+        <span style="font-size:13px;color:var(--text-secondary)">${isDark ? 'Aktif' : 'Nonaktif'}</span>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">💾 Penggunaan Storage</label>
+      <div style="font-size:13px;color:var(--text-secondary)">${getStorageUsage()} MB digunakan dari ~5 MB</div>
+      <div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.min(parseFloat(getStorageUsage()) / 5 * 100, 100)}%;background:var(--primary);border-radius:3px"></div></div>
+    </div>
+
+    <div class="yield-divider" style="margin:16px 0"></div>
+
     <div class="settings-info">
       🤖 Hubungkan Telegram Bot untuk mengirim reminder tagihan sewa ke chat pribadimu.
     </div>
@@ -2338,8 +2594,391 @@ function importData() {
   input.click();
 }
 
+// ===== ARCHIVE TENANT =====
+function archiveTenant(tenantId) {
+  const tenants = getTenants();
+  const tenant = tenants.find(t => t.id === tenantId);
+  if (!tenant) return;
+  const unit = getUnits().find(u => u.id === tenant.unitId);
+  if (!confirm('Akhiri kontrak ' + tenant.name + '?\n\nPenyewa akan diarsipkan, unit dikembalikan ke status Kosong.\nTagihan yang belum dibayar akan dihapus.\nTagihan lunas tetap disimpan.')) return;
+
+  // Copy to tenant history
+  const history = getTenantHistory();
+  history.push({
+    ...tenant,
+    unitId: tenant.unitId,
+    unitName: unit ? unit.name : '',
+    propertyName: unit ? unit.property : '',
+    archivedAt: new Date().toISOString()
+  });
+  saveTenantHistory(history);
+
+  // Set unit back to vacant
+  if (unit) {
+    const units = getUnits();
+    const ui = units.findIndex(u => u.id === tenant.unitId);
+    if (ui >= 0) { units[ui].status = 'vacant'; saveUnits(units); }
+  }
+
+  // Remove unpaid auto-generated payments, keep paid ones
+  const payments = getPayments().filter(p => !(p.tenantId === tenantId && p.autoGenerated && p.status !== 'paid'));
+  savePayments(payments);
+
+  // Remove tenant from active list
+  saveTenants(tenants.filter(t => t.id !== tenantId));
+
+  closeModal();
+  refreshCurrentPage();
+  alert('Kontrak ' + tenant.name + ' telah diakhiri dan diarsipkan.');
+}
+
+// ===== UNIT HISTORY =====
+function showUnitHistory(unitId) {
+  const unit = getUnits().find(u => u.id === unitId);
+  if (!unit) return;
+
+  const currentTenant = getTenants().find(t => t.unitId === unitId);
+  const archived = getTenantHistory().filter(h => h.unitId === unitId).sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+
+  let html = '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">' + unit.property + ' — ' + unit.name + '</div>';
+
+  if (currentTenant) {
+    html += '<div class="card" style="padding:12px;border-radius:10px;margin-bottom:12px;border-left:4px solid var(--success)">';
+    html += '<div style="font-weight:700;color:var(--success);font-size:13px;margin-bottom:4px">Penyewa Saat Ini</div>';
+    html += '<div style="font-weight:700">' + currentTenant.name + '</div>';
+    html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(currentTenant.startDate) + ' — ' + formatDate(currentTenant.endDate) + '</div>';
+    if (currentTenant.phone) html += '<div style="font-size:12px;color:var(--text-muted)">' + currentTenant.phone + '</div>';
+    html += '</div>';
+  } else {
+    html += '<div style="padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;text-align:center;color:var(--text-muted);font-size:13px">Unit sedang kosong</div>';
+  }
+
+  if (archived.length > 0) {
+    html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text-secondary)">Riwayat Penyewa</div>';
+    archived.forEach(h => {
+      html += '<div class="card" style="padding:10px;border-radius:8px;margin-bottom:8px;border-left:4px solid var(--border)">';
+      html += '<div style="font-weight:600;font-size:13px">' + h.name + '</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(h.startDate) + ' — ' + formatDate(h.endDate) + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-muted)">Diarsipkan: ' + formatDate(h.archivedAt) + '</div>';
+      html += '</div>';
+    });
+  } else if (!currentTenant) {
+    html += '<p class="empty-state">Belum ada riwayat penyewa</p>';
+  }
+
+  openModal('Riwayat Unit', html);
+}
+
+// ===== CONTRACT GENERATION =====
+function generateContract(tenantId) {
+  const tenant = getTenants().find(t => t.id === tenantId);
+  if (!tenant) return '';
+  const unit = getUnits().find(u => u.id === tenant.unitId);
+  if (!unit) return '';
+  const propData = getPropertyData(unit.property);
+
+  const ownerName = propData.ownerName || '[Nama Pemilik]';
+  const ownerAddress = propData.ownerAddress || '[Alamat Pemilik]';
+  const ownerKTP = propData.ownerKTP || '[No. KTP Pemilik]';
+  const amount = unit.price;
+  const amountWords = terbilang(amount);
+  const deposit = tenant.deposit || 0;
+  const depositWords = deposit > 0 ? terbilang(deposit) : 'nol';
+  const billingLabel = unit.billingCycle === 'yearly' ? 'tahun' : 'bulan';
+
+  const startDate = new Date(tenant.startDate);
+  const endDate = new Date(tenant.endDate);
+  const months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const fmtDate = (d) => d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  const today = new Date();
+
+  return `<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><title>Surat Perjanjian Sewa — ${tenant.name}</title>
+<style>
+@media print { body { margin: 0; } @page { size: A4; margin: 2cm; } }
+body { font-family: 'Times New Roman', serif; font-size: 13pt; line-height: 1.8; color: #222; max-width: 210mm; margin: 0 auto; padding: 2cm; }
+h1 { text-align: center; font-size: 16pt; text-decoration: underline; margin-bottom: 4px; }
+h2 { text-align: center; font-size: 13pt; font-weight: normal; margin-top: 0; margin-bottom: 24px; }
+.pasal { font-weight: bold; margin-top: 20px; margin-bottom: 8px; }
+.signature { display: flex; justify-content: space-between; margin-top: 60px; }
+.sig-box { text-align: center; width: 45%; }
+.sig-line { margin-top: 80px; border-top: 1px solid #222; padding-top: 4px; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+td { padding: 4px 8px; vertical-align: top; }
+td:first-child { width: 160px; }
+</style></head><body>
+<h1>SURAT PERJANJIAN SEWA MENYEWA</h1>
+<h2>No. ${DB.genId().toUpperCase()}</h2>
+
+<p>Pada hari ini, tanggal <strong>${fmtDate(today)}</strong>, kami yang bertanda tangan di bawah ini:</p>
+
+<table>
+<tr><td>Nama</td><td>: <strong>${ownerName}</strong></td></tr>
+<tr><td>Alamat</td><td>: ${ownerAddress}</td></tr>
+<tr><td>No. KTP</td><td>: ${ownerKTP}</td></tr>
+</table>
+<p>Selanjutnya disebut sebagai <strong>PIHAK PERTAMA</strong> (Pemilik).</p>
+
+<table>
+<tr><td>Nama</td><td>: <strong>${tenant.name}</strong></td></tr>
+<tr><td>No. HP</td><td>: ${tenant.phone || '-'}</td></tr>
+</table>
+<p>Selanjutnya disebut sebagai <strong>PIHAK KEDUA</strong> (Penyewa).</p>
+
+<p>Kedua belah pihak sepakat untuk mengadakan perjanjian sewa menyewa dengan ketentuan sebagai berikut:</p>
+
+<p class="pasal">Pasal 1 — Objek Sewa</p>
+<p>PIHAK PERTAMA menyewakan kepada PIHAK KEDUA berupa:</p>
+<table>
+<tr><td>Properti</td><td>: ${unit.property}</td></tr>
+<tr><td>Unit</td><td>: ${unit.name}${unit.subtype ? ' (' + unit.subtype + ')' : ''}</td></tr>
+<tr><td>Tipe</td><td>: ${unit.type}</td></tr>
+${unit.facilities ? '<tr><td>Fasilitas</td><td>: ' + unit.facilities.split(',').map(f => getFacilityLabel(f.trim())).join(', ') + '</td></tr>' : ''}
+</table>
+
+<p class="pasal">Pasal 2 — Jangka Waktu Sewa</p>
+<p>Masa sewa berlaku sejak <strong>${fmtDate(startDate)}</strong> sampai dengan <strong>${fmtDate(endDate)}</strong>.</p>
+
+<p class="pasal">Pasal 3 — Harga Sewa</p>
+<p>Harga sewa yang disepakati adalah sebesar <strong>Rp ${Number(amount).toLocaleString('id-ID')}</strong> (${amountWords} rupiah) per ${billingLabel}.</p>
+<p>Pembayaran dilakukan paling lambat tanggal <strong>${tenant.dueDay || '-'}</strong> setiap ${billingLabel}nya.</p>
+
+<p class="pasal">Pasal 4 — Deposit</p>
+<p>PIHAK KEDUA menyerahkan deposit sebesar <strong>Rp ${Number(deposit).toLocaleString('id-ID')}</strong> (${depositWords} rupiah) yang akan dikembalikan pada akhir masa sewa setelah dipotong biaya kerusakan (jika ada).</p>
+
+<p class="pasal">Pasal 5 — Kewajiban Penyewa</p>
+<ol>
+<li>Menjaga kebersihan dan kelestarian unit yang disewa.</li>
+<li>Tidak mengubah struktur bangunan tanpa izin tertulis dari PIHAK PERTAMA.</li>
+<li>Membayar sewa tepat waktu sesuai tanggal yang disepakati.</li>
+<li>Mematuhi peraturan yang berlaku di lingkungan properti.</li>
+</ol>
+
+<p class="pasal">Pasal 6 — Pemutusan Perjanjian</p>
+<p>Perjanjian ini dapat diputus sebelum waktunya apabila PIHAK KEDUA melanggar ketentuan yang telah disepakati, dengan pemberitahuan minimal 30 hari sebelumnya.</p>
+
+<p>Demikian surat perjanjian ini dibuat dan ditandatangani oleh kedua belah pihak dalam keadaan sadar dan tanpa paksaan.</p>
+
+<div class="signature">
+<div class="sig-box"><div>PIHAK PERTAMA</div><div class="sig-line">(${ownerName})</div></div>
+<div class="sig-box"><div>PIHAK KEDUA</div><div class="sig-line">(${tenant.name})</div></div>
+</div>
+
+<p style="text-align:center;font-size:10pt;color:#888;margin-top:40px">Dokumen ini digenerate oleh PropertiKu pada ${fmtDate(today)}</p>
+</body></html>`;
+}
+
+function downloadContract(tenantId) {
+  const tenant = getTenants().find(t => t.id === tenantId);
+  if (!tenant) { alert('Penyewa tidak ditemukan'); return; }
+  const html = generateContract(tenantId);
+  if (!html) { alert('Data tidak lengkap untuk membuat kontrak'); return; }
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Kontrak-' + tenant.name.replace(/\s+/g, '_') + '-' + new Date().toISOString().slice(0, 10) + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== ROI CARDS FOR DASHBOARD =====
+function renderROICards() {
+  const units = getUnits();
+  const payments = getPayments();
+  const props = [...new Set(units.map(u => u.property))];
+  const container = document.getElementById('dashboard-roi');
+  if (!container) return;
+
+  if (!props.length) { container.innerHTML = '<p class="empty-state">Belum ada properti</p>'; return; }
+
+  container.innerHTML = props.map(prop => {
+    const pd = getPropertyData(prop);
+    const totalInvestment = pd.purchasePrice || 0;
+    if (totalInvestment <= 0) return '';
+
+    const totalIncome = payments.filter(p => p.propertyName === prop && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    const totalExpense = payments.filter(p => p.propertyName === prop && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    const netProfit = totalIncome - totalExpense;
+    const actualROI = totalInvestment > 0 ? (netProfit / totalInvestment * 100).toFixed(1) : 0;
+
+    // months active
+    const allDates = payments.filter(p => p.propertyName === prop && p.createdAt).map(p => new Date(p.createdAt));
+    const firstDate = allDates.length > 0 ? new Date(Math.min(...allDates)) : new Date();
+    const monthsActive = Math.max(1, Math.round((new Date() - firstDate) / (30.44 * 24 * 60 * 60 * 1000)));
+    const avgMonthlyProfit = netProfit / monthsActive;
+    const projectedPaybackMonths = avgMonthlyProfit > 0 ? Math.round(totalInvestment / avgMonthlyProfit) : 0;
+    const paybackLabel = projectedPaybackMonths > 0 ? (projectedPaybackMonths >= 24 ? (projectedPaybackMonths / 12).toFixed(1) + ' thn' : projectedPaybackMonths + ' bln') : '-';
+
+    const progressPct = totalInvestment > 0 ? Math.min((netProfit / totalInvestment) * 100, 100) : 0;
+    const progressColor = netProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    return '<div style="background:var(--bg-card);border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      + '<span style="font-weight:700;font-size:13px;color:var(--text)">' + prop + '</span>'
+      + '<span style="font-size:12px;font-weight:800;color:' + (parseFloat(actualROI) >= 0 ? 'var(--success)' : 'var(--danger)') + '">ROI ' + actualROI + '%</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);margin-bottom:6px">'
+      + '<span>Profit: ' + formatRp(netProfit) + '</span>'
+      + '<span>Payback: ' + paybackLabel + '</span>'
+      + '<span>' + monthsActive + ' bln aktif</span>'
+      + '</div>'
+      + '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
+      + '<div style="height:100%;width:' + Math.max(progressPct, 0) + '%;background:' + progressColor + ';border-radius:3px;transition:width 0.3s"></div>'
+      + '</div>'
+      + '</div>';
+  }).filter(Boolean).join('');
+}
+
+// ===== UNIT PHOTOS =====
+function addUnitPhoto(unitId) {
+  const photos = getUnitPhotos().filter(p => p.unitId === unitId);
+  if (photos.length >= 5) { alert('Maksimal 5 foto per unit'); return; }
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.setAttribute('capture', 'environment');
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const resized = await resizeImage(ev.target.result, 800, 0.6);
+      const allPhotos = getUnitPhotos();
+      allPhotos.push({ id: DB.genId(), unitId, data: resized, createdAt: new Date().toISOString() });
+      saveUnitPhotos(allPhotos);
+      // Refresh the form
+      closeModal();
+      showUnitForm(unitId);
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function deleteUnitPhoto(photoId, unitId) {
+  if (!confirm('Hapus foto ini?')) return;
+  saveUnitPhotos(getUnitPhotos().filter(p => p.id !== photoId));
+  closeModal();
+  showUnitForm(unitId);
+}
+
+function showUnitPhotos(unitId) {
+  const photos = getUnitPhotos().filter(p => p.unitId === unitId);
+  const unit = getUnits().find(u => u.id === unitId);
+  if (photos.length === 0) { alert('Belum ada foto untuk unit ini'); return; }
+
+  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+  photos.forEach((ph, idx) => {
+    html += '<div style="border-radius:10px;overflow:hidden;aspect-ratio:1;cursor:pointer" onclick="viewFullPhoto(' + idx + ',\'' + unitId + '\')">'
+      + '<img src="' + ph.data + '" style="width:100%;height:100%;object-fit:cover">'
+      + '</div>';
+  });
+  html += '</div>';
+
+  openModal('Foto ' + (unit ? unit.name : 'Unit'), html);
+}
+
+function viewFullPhoto(idx, unitId) {
+  const photos = getUnitPhotos().filter(p => p.unitId === unitId);
+  if (!photos[idx]) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = photos[idx].data;
+  img.style.cssText = 'max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
+// ===== CHARTS =====
+function renderCharts() {
+  let container = document.getElementById('rpt-tab-charts');
+  if (!container) {
+    // Create the tab container dynamically
+    const reportPage = document.getElementById('page-reports');
+    if (reportPage) {
+      container = document.createElement('div');
+      container.id = 'rpt-tab-charts';
+      container.className = 'rpt-tab active';
+      reportPage.appendChild(container);
+    } else return;
+  }
+
+  const payments = getPayments();
+  const units = getUnits();
+  const now = new Date();
+
+  // 1. Income Trend (last 6 months)
+  const months6 = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = getMonthYear(d);
+    const label = d.toLocaleDateString('id-ID', { month: 'short' });
+    const value = payments.filter(p => p.period === key && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    months6.push({ label, value });
+  }
+
+  // 2. Expense by category
+  const expByCat = {};
+  payments.filter(p => p.type === 'expense').forEach(p => {
+    const cat = p.expenseCategory || 'other';
+    expByCat[cat] = (expByCat[cat] || 0) + p.amount;
+  });
+  const donutData = EXPENSE_CATEGORIES.filter(c => expByCat[c.id]).map(c => ({ label: c.icon + ' ' + c.label, value: expByCat[c.id] }));
+
+  // 3. Profit per Property (bar chart)
+  const props = [...new Set(units.map(u => u.property))];
+  const barData = props.map(prop => {
+    const inc = payments.filter(p => p.propertyName === prop && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    const exp = payments.filter(p => p.propertyName === prop && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    return { label: prop, values: [inc, exp] };
+  });
+
+  // 4. Occupancy Trend
+  const totalUnits = units.length || 1;
+  const occData = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = getMonthYear(d);
+    const label = d.toLocaleDateString('id-ID', { month: 'short' });
+    const occCount = new Set(payments.filter(p => p.period === key && p.type === 'income').map(p => p.tenantId)).size;
+    const rate = Math.min(Math.round((occCount / totalUnits) * 100), 100);
+    occData.push({ label, value: rate });
+  }
+
+  container.innerHTML = `
+    <div class="card"><h3 class="card-title">📈 Tren Pemasukan (6 Bulan)</h3>${svgLineChart(months6, { color: 'var(--success)' })}</div>
+    <div class="card"><h3 class="card-title">🍩 Pengeluaran per Kategori</h3>${svgDonutChart(donutData)}</div>
+    <div class="card"><h3 class="card-title">📊 Income vs Expense per Properti</h3>${svgBarChart(barData, { colors: ['var(--success)', 'var(--danger)'], labels: ['Income', 'Expense'] })}</div>
+    <div class="card"><h3 class="card-title">📉 Tren Occupancy (6 Bulan)</h3>${svgLineChart(occData, { color: 'var(--primary)' })}</div>
+  `;
+}
+
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
+  // Apply saved theme
+  setTheme(getTheme());
+
+  // Add dark mode toggle button to header (only once)
+  if (!document.getElementById('theme-toggle-btn')) {
+    const header = document.querySelector('.header');
+    if (header) {
+      const settingsBtn = document.getElementById('btn-settings');
+      if (settingsBtn) {
+        const themeBtn = document.createElement('button');
+        themeBtn.className = 'theme-toggle';
+        themeBtn.setAttribute('onclick', 'toggleTheme()');
+        themeBtn.id = 'theme-toggle-btn';
+        themeBtn.title = 'Dark/Light Mode';
+        themeBtn.textContent = getTheme() === 'dark' ? '\u2600\uFE0F' : '\u{1F319}';
+        settingsBtn.parentNode.insertBefore(themeBtn, settingsBtn);
+      }
+    }
+  }
+
   updateOverduePayments();
   renderDashboard();
   // Auto-send Telegram reminder if needed
