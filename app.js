@@ -67,6 +67,80 @@ function naturalSort(a, b) {
   return 0;
 }
 
+// ===== Toast Notifications =====
+function showToast(msg, type = 'success', duration = 2500) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const icons = { success: '&#10003;', error: '&#10007;', info: '&#8505;', warning: '&#9888;' };
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<div class="toast-icon ${type}">${icons[type] || icons.info}</div><div class="toast-msg">${msg}</div>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-out');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// ===== Empty State with SVG Illustration =====
+function emptyStateHTML(type) {
+  const states = {
+    unit: {
+      svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="12" y="28" width="56" height="40" rx="4" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M12 36h56" stroke="var(--text-muted)" stroke-width="2"/><rect x="24" y="44" width="12" height="16" rx="2" stroke="var(--text-muted)" stroke-width="2"/><rect x="44" y="44" width="12" height="8" rx="2" stroke="var(--text-muted)" stroke-width="2"/><path d="M40 12L8 28h64L40 12z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
+      title: 'Belum Ada Unit',
+      desc: 'Mulai tambah unit properti kamu — kos, apartemen, rumah, atau ruko.',
+      action: `<button class="btn btn-primary" onclick="showUnitForm(); closeFabMenu()">+ Tambah Unit Pertama</button>`
+    },
+    tenant: {
+      svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><circle cx="40" cy="28" r="14" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M16 68c0-13.255 10.745-24 24-24s24 10.745 24 24" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
+      title: 'Belum Ada Penyewa',
+      desc: 'Tambahkan penyewa dan hubungkan ke unit yang tersedia.',
+      action: `<button class="btn btn-primary" onclick="showTenantForm(); closeFabMenu()">+ Tambah Penyewa</button>`
+    },
+    payment: {
+      svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="10" y="22" width="60" height="36" rx="6" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M10 34h60" stroke="var(--text-muted)" stroke-width="2"/><circle cx="56" cy="46" r="5" stroke="var(--text-muted)" stroke-width="2"/><circle cx="46" cy="46" r="5" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
+      title: 'Belum Ada Pembayaran',
+      desc: 'Catat pemasukan sewa atau pengeluaran properti kamu.',
+      action: `<button class="btn btn-primary" onclick="showPaymentForm(); closeFabMenu()">+ Catat Pembayaran</button>`
+    },
+    property: {
+      svg: `<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="8" y="24" width="48" height="32" rx="3" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M32 8L4 24h56L32 8z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
+      title: 'Belum Ada Properti',
+      desc: 'Tambahkan properti pertama kamu untuk mulai.',
+      action: ''
+    }
+  };
+  const s = states[type] || states.property;
+  return `<div class="empty-state-fancy">${s.svg}<div class="empty-title">${s.title}</div><div class="empty-desc">${s.desc}</div>${s.action}</div>`;
+}
+
+// ===== Onboarding =====
+function showOnboarding() {
+  if (DB.getVal('onboarded')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'onboarding-overlay';
+  overlay.id = 'onboarding-overlay';
+  overlay.innerHTML = `
+    <div class="onboarding-content">
+      <div class="onboarding-icon">🏠</div>
+      <div class="onboarding-title">Selamat Datang di PropertiKu!</div>
+      <div class="onboarding-desc">Kelola properti sewamu dengan mudah — dari kos-kosan sampai apartemen.</div>
+      <div class="onboarding-steps">
+        <div class="onboarding-step"><div class="onboarding-step-num">1</div><div class="onboarding-step-text">Tambah properti & unit kamu</div></div>
+        <div class="onboarding-step"><div class="onboarding-step-num">2</div><div class="onboarding-step-text">Daftarkan penyewa di setiap unit</div></div>
+        <div class="onboarding-step"><div class="onboarding-step-num">3</div><div class="onboarding-step-text">Catat pembayaran & pantau cashflow</div></div>
+      </div>
+      <button class="onboarding-btn" onclick="dismissOnboarding()">Mulai Sekarang</button>
+      <button class="onboarding-skip" onclick="dismissOnboarding()">Lewati</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function dismissOnboarding() {
+  DB.setVal('onboarded', '1');
+  const el = document.getElementById('onboarding-overlay');
+  if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s ease'; setTimeout(() => el.remove(), 300); }
+}
+
 // ===== FAB =====
 function toggleFabMenu() {
   ['fab-main','fab-menu','fab-backdrop'].forEach(id => document.getElementById(id).classList.toggle('open'));
@@ -707,6 +781,7 @@ function saveUnit(e, editId) {
   }
 
   saveUnits(units); closeModal(); refreshCurrentPage();
+  showToast(editId ? 'Unit berhasil diperbarui' : 'Unit berhasil ditambahkan', 'success');
 }
 
 function deleteUnit(id) { if (!confirm('Hapus unit ini?')) return; saveUnits(getUnits().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
@@ -755,7 +830,7 @@ function renderUnits() {
   }
   const container = document.getElementById('unit-list');
 
-  if (units.length === 0) { container.innerHTML = '<p class="empty-state">Belum ada unit. Tap + untuk menambah.</p>'; return; }
+  if (units.length === 0) { container.innerHTML = emptyStateHTML('unit'); return; }
 
   const icons = { kos:'🏠', apartemen:'🏢', rumah:'🏡', ruko:'🏪', kantor:'🏛' };
 
@@ -794,7 +869,7 @@ function renderUnits() {
           const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="Lantai"></span>` : '';
           const hasPhotos = getUnitPhotos().some(p => p.unitId === u.id);
           const hasHistory = getTenantHistory().some(h => h.unitId === u.id);
-          return `<div class="unit-item" onclick="showUnitForm('${u.id}')">
+          return `<div class="unit-item unit-${u.status}" onclick="showUnitForm('${u.id}')">
             <div class="unit-item-left">
               ${floorDot}
               <span class="unit-item-name">${u.name}</span>
@@ -980,8 +1055,10 @@ function saveTenant(e, editId) {
       savePayments(payments);
       // Mark past-due ones as overdue
       updateOverduePayments();
-      alert(`✅ Penyewa ditambahkan!\n📋 ${newPayments.length} tagihan bulanan otomatis dibuat.\n\nDari ${formatDate(data.startDate)} s/d ${formatDate(data.endDate)}, jatuh tempo tgl ${data.dueDay} tiap bulan.`);
+      showToast(`Penyewa ditambahkan! ${newPayments.length} tagihan dibuat`, 'success', 3000);
     }
+  } else {
+    showToast('Penyewa berhasil diperbarui', 'success');
   }
 
   closeModal(); refreshCurrentPage();
@@ -1039,7 +1116,7 @@ function renderTenants() {
   const q = (document.getElementById('search-tenant')?.value||'').toLowerCase();
   const filtered = tenants.filter(t => t.name.toLowerCase().includes(q));
   const container = document.getElementById('tenant-list');
-  if (filtered.length === 0) { container.innerHTML = '<p class="empty-state">Belum ada penyewa. Tap + untuk menambah.</p>'; return; }
+  if (filtered.length === 0) { container.innerHTML = q ? '<p class="empty-state">Tidak ditemukan penyewa "' + q + '"</p>' : emptyStateHTML('tenant'); return; }
   container.innerHTML = filtered.map(t => {
     const unit = units.find(u=>u.id===t.unitId);
     const dl = daysUntil(t.endDate);
@@ -1137,12 +1214,14 @@ function savePayment(e, editId) {
   if (editId) { const i = payments.findIndex(x=>x.id===editId); if (i>=0) payments[i]=data; }
   else payments.push(data);
   savePayments(payments); closeModal(); refreshCurrentPage();
+  showToast(editId ? 'Pembayaran diperbarui' : (data.type === 'expense' ? 'Pengeluaran dicatat' : 'Pembayaran dicatat'), 'success');
 }
 
 function markPaid(id) {
   const p = getPayments(); const i = p.findIndex(x=>x.id===id);
   if (i>=0) { p[i].status='paid'; p[i].paidDate=new Date().toISOString(); savePayments(p); }
   closeModal(); refreshCurrentPage();
+  showToast('Ditandai lunas', 'success');
 }
 
 function deletePayment(id) { if (!confirm('Hapus?')) return; savePayments(getPayments().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
@@ -1168,6 +1247,7 @@ function quickTogglePaid(id, ev) {
   }
   savePayments(payments);
   refreshCurrentPage();
+  showToast(p.status === 'paid' ? 'Ditandai lunas' : 'Status dibatalkan', p.status === 'paid' ? 'success' : 'info');
 }
 
 function renderPayments() {
@@ -1176,7 +1256,7 @@ function renderPayments() {
   const filtered = paymentFilter==='all' ? payments : payments.filter(p=>p.status===paymentFilter);
   const sorted = filtered.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const container = document.getElementById('payment-list');
-  if (sorted.length===0) { container.innerHTML = '<p class="empty-state">Belum ada pembayaran. Tap + untuk mencatat.</p>'; return; }
+  if (sorted.length===0) { container.innerHTML = emptyStateHTML('payment'); return; }
   container.innerHTML = sorted.map(p => {
     const t = tenants.find(x=>x.id===p.tenantId);
     const st = {paid:{b:'badge-success',l:'✅ Lunas'},pending:{b:'badge-warning',l:'⏳ Pending'},overdue:{b:'badge-danger',l:'⚠️ Nunggak'}}[p.status]||{b:'badge-warning',l:'⏳ Pending'};
@@ -1190,7 +1270,7 @@ function renderPayments() {
       ${isPaid ? '✅' : '☐'}
     </button>` : '';
 
-    return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''}" onclick="showPaymentForm('${p.id}')">
+    return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm('${p.id}')">
       <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
         ${toggleBtn}
         <div style="flex:1;min-width:0">
@@ -3065,4 +3145,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderDashboard();
   // Auto-send Telegram reminder if needed
   autoReminderCheck();
+  // Show onboarding for first-time users
+  showOnboarding();
 });
