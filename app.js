@@ -103,6 +103,14 @@ function getPropertyAnnualCost(propData) {
   return (propData.pbb || 0) + (propData.maintenance || 0) + (propData.insurance || 0) + (propData.otherExpense || 0);
 }
 
+function getUnitMonthlyRent(unit) {
+  return unit.billingCycle === 'yearly' ? (unit.price || 0) / 12 : (unit.price || 0);
+}
+
+function getUnitYearlyRent(unit) {
+  return unit.billingCycle === 'yearly' ? (unit.price || 0) : (unit.price || 0) * 12;
+}
+
 function getUnitMonthlyCost(unit) {
   return (unit.ipl || 0) + (unit.sinkingFund || 0) + (unit.unitOtherCost || 0);
 }
@@ -735,7 +743,7 @@ function renderUnits() {
     const allPropUnits = units.filter(u => u.property === prop);
     const occCount = allPropUnits.filter(u => u.status === 'occupied').length;
     const totalCount = allPropUnits.length;
-    const monthlyIncome = allPropUnits.filter(u => u.status === 'occupied').reduce((s, u) => s + (u.billingCycle === 'yearly' ? u.price / 12 : u.price), 0);
+    const monthlyIncome = allPropUnits.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
     const type = allPropUnits[0]?.type || 'kos';
     const collapsed = _collapsedProps[prop] && !searchTerm;
 
@@ -1212,7 +1220,7 @@ function renderDashboard() {
     const o = pt>0?Math.round((po/pt)*100):0, circ = 2*Math.PI*16, off = circ-(o/100)*circ;
     const col = o>=80?'var(--success)':o>=50?'var(--warning-dark)':'var(--danger)';
     return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${prop}</span>
-      <span class="property-mini-detail">${po}/${pt} terisi · ${formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?u.price:0),0))}/bln</span></div>
+      <span class="property-mini-detail">${po}/${pt} terisi · ${formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0))}/bln</span></div>
       <div class="occ-ring"><svg width="44" height="44" viewBox="0 0 44 44">
         <circle cx="22" cy="22" r="16" fill="none" stroke="var(--border)" stroke-width="4"/>
         <circle cx="22" cy="22" r="16" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${circ}" stroke-dashoffset="${off}" stroke-linecap="round"/>
@@ -1322,8 +1330,8 @@ function renderYield() {
     const occCount = pu.filter(u=>u.status==='occupied').length;
     const occRate = pu.length > 0 ? Math.round(occCount / pu.length * 100) : 0;
 
-    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+u.price,0);
-    const potentialRent = pu.reduce((s,u)=>s+u.price,0);
+    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
+    const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
     const yearIncome = monthlyRent * 12;
 
     // Recorded operational expenses from payments
@@ -1494,8 +1502,8 @@ function renderMultiProperty() {
     const monthInc = payments.filter(p=>p.propertyName===prop&&p.period===cm&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0);
     const monthExp = payments.filter(p=>p.propertyName===prop&&p.period===cm&&p.type==='expense').reduce((s,p)=>s+p.amount,0);
     const net = monthInc - monthExp;
-    const potentialRent = pu.reduce((s,u)=>s+u.price,0);
-    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+u.price,0);
+    const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
+    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
     const yearIncome = monthlyRent * 12;
     const cy = getYear();
     const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
@@ -1632,7 +1640,7 @@ function kprSelectProperty(propName) {
   if (pd.purchasePrice) document.getElementById('kpr-harga').value = pd.purchasePrice;
   // Fill rent from property units
   const propUnits = getUnits().filter(u => u.property === propName);
-  const potentialRent = propUnits.reduce((s, u) => s + u.price, 0);
+  const potentialRent = propUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
   if (potentialRent > 0) document.getElementById('kpr-sewa-awal').value = potentialRent;
   _kprState = { ..._kprState, selectedProperty: propName };
   calcKPR();
@@ -1721,8 +1729,8 @@ function calcKPR() {
   let overlayHtml = '';
   if (selectedProp) {
     const units = getUnits().filter(u => u.property === selectedProp);
-    const monthlyRent = units.filter(u => u.status === 'occupied').reduce((s, u) => s + u.price, 0);
-    const potentialRent = units.reduce((s, u) => s + u.price, 0);
+    const monthlyRent = units.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+    const potentialRent = units.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
     const totalMonthlyOut = monthlyFixed + monthlyInsurance;
     const cashflowFixed = monthlyRent - totalMonthlyOut;
     const totalMonthlyOutFloat = monthlyFloating + monthlyInsurance;
