@@ -764,10 +764,9 @@ function renderUnits() {
 
 // ===== TENANT MANAGEMENT =====
 function calcDefaultDueDay(startDate) {
-  // Default jatuh tempo = 1 hari sebelum tanggal mulai sewa
+  // Default jatuh tempo = tanggal yang sama dengan mulai sewa
   const d = new Date(startDate);
-  const day = d.getDate();
-  return day <= 1 ? 28 : day - 1; // Jika tgl 1, jatuh tempo tgl 28
+  return d.getDate(); // 1-31, akan di-cap otomatis di bulan pendek
 }
 
 function showTenantForm(editId) {
@@ -791,7 +790,7 @@ function showTenantForm(editId) {
       <div class="form-group"><label class="form-label">Akhir Kontrak</label>
         <input class="form-input" name="endDate" type="date" required value="${t?.endDate||''}"></div>
       <div class="form-group"><label class="form-label">Tgl Jatuh Tempo (tiap bulan)</label>
-        <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="28" placeholder="Auto: 1 hari sebelum mulai sewa" value="${defaultDueDay}">
+        <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="31" placeholder="Auto: 1 hari sebelum mulai sewa" value="${defaultDueDay}">
         <small style="color:var(--text-muted);display:block;margin-top:4px">Tanggal jatuh tempo pembayaran sewa tiap bulan. Kosongkan = otomatis 1 hari sebelum tanggal mulai sewa.</small></div>
       <div class="form-group"><label class="form-label">Deposit (Rp)</label>
         <input class="form-input" name="deposit" type="number" placeholder="0" value="${t?.deposit||''}"></div>
