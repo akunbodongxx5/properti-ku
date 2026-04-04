@@ -1745,20 +1745,115 @@ function renderKPRSimulator() {
     <div id="kpr-results"></div>
   `;
 
-  setTimeout(() => initRpInputs(document.getElementById('kpr-content')), 50);
+  setTimeout(() => {
+    initRpInputs(document.getElementById('kpr-content'));
+    // If a property was previously selected, restore the unit breakdown
+    if (d.selectedProperty) {
+      const selUnits = getUnits().filter(u => u.property === d.selectedProperty);
+      const selPd = getPropertyData(d.selectedProperty);
+      renderKPRUnitBreakdown(d.selectedProperty, selUnits, selPd);
+    }
+  }, 50);
   calcKPR();
 }
 
 function kprSelectProperty(propName) {
-  if (!propName) return;
+  if (!propName) {
+    _kprState = { ..._kprState, selectedProperty: '' };
+    const el = document.getElementById('kpr-unit-breakdown');
+    if (el) el.innerHTML = '';
+    calcKPR();
+    return;
+  }
   const pd = getPropertyData(propName);
-  if (pd.purchasePrice) document.getElementById('kpr-harga').value = formatNumDots(pd.purchasePrice);
-  // Fill rent from property units
   const propUnits = getUnits().filter(u => u.property === propName);
   const potentialRent = propUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+  const unitsCost = getAllUnitsAnnualCost(propUnits);
+  const propCost = getPropertyAnnualCost(pd);
+
+  // Auto-fill from real data
+  if (pd.purchasePrice) document.getElementById('kpr-harga').value = formatNumDots(pd.purchasePrice);
   if (potentialRent > 0) document.getElementById('kpr-sewa-awal').value = formatNumDots(potentialRent);
+
+  // Fill existing cicilan if property has KPR data
+  if (pd.cicilanPerBulan && pd.sisaTenor) {
+    document.getElementById('kpr-tenor').value = Math.ceil(pd.sisaTenor / 12) || 20;
+  }
+
   _kprState = { ..._kprState, selectedProperty: propName };
+
+  // Show auto-fill summary
+  const parts = [];
+  if (pd.purchasePrice) parts.push('harga beli');
+  if (potentialRent > 0) parts.push(`sewa ${formatRp(potentialRent)}/bln dari ${propUnits.length} unit`);
+  if (parts.length) showToast(`Data ${propName} diisi: ${parts.join(', ')}`, 'info', 3000);
+
+  // Render unit breakdown under the property selector
+  renderKPRUnitBreakdown(propName, propUnits, pd);
+
   calcKPR();
+}
+
+function renderKPRUnitBreakdown(propName, units, pd) {
+  let el = document.getElementById('kpr-unit-breakdown');
+  if (!el) {
+    const select = document.getElementById('kpr-property');
+    if (!select) return;
+    el = document.createElement('div');
+    el.id = 'kpr-unit-breakdown';
+    select.parentNode.after(el);
+  }
+
+  if (!units.length) { el.innerHTML = ''; return; }
+
+  const occupiedUnits = units.filter(u => u.status === 'occupied');
+  const vacantUnits = units.filter(u => u.status === 'vacant');
+  const totalMonthlyRent = units.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+  const actualMonthlyRent = occupiedUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+  const totalMonthlyCost = units.reduce((s, u) => s + getUnitMonthlyCost(u), 0);
+  const propMonthlyCost = (getPropertyAnnualCost(pd)) / 12;
+
+  el.innerHTML = `
+    <div style="background:var(--bg);border-radius:var(--radius-xs);padding:14px;margin-top:12px;margin-bottom:12px;border-left:4px solid var(--primary)">
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">📋 Data Real — ${propName}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div style="background:var(--bg-card);padding:8px 10px;border-radius:8px;text-align:center">
+          <div style="font-size:16px;font-weight:800;color:var(--success)">${formatRp(actualMonthlyRent)}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">SEWA AKTUAL/BLN</div>
+        </div>
+        <div style="background:var(--bg-card);padding:8px 10px;border-radius:8px;text-align:center">
+          <div style="font-size:16px;font-weight:800;color:var(--primary)">${formatRp(totalMonthlyRent)}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">POTENSI/BLN</div>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Detail per Unit</div>
+      ${units.map(u => {
+        const rent = getUnitMonthlyRent(u);
+        const cost = getUnitMonthlyCost(u);
+        const isOcc = u.status === 'occupied';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span style="display:flex;align-items:center;gap:6px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${isOcc ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0"></span>
+            <span style="font-weight:600;color:var(--text)">${u.name}</span>
+          </span>
+          <span>
+            <span style="font-weight:700;color:${isOcc ? 'var(--success)' : 'var(--text-muted)'}">${formatRp(rent)}/bln</span>
+            ${cost > 0 ? `<span style="color:var(--danger);font-size:11px;margin-left:4px">-${formatRp(cost)}</span>` : ''}
+          </span>
+        </div>`;
+      }).join('')}
+      ${(totalMonthlyCost > 0 || propMonthlyCost > 0) ? `
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+          ${totalMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>Biaya unit/bln</span><span style="font-weight:700">-${formatRp(Math.round(totalMonthlyCost))}</span></div>` : ''}
+          ${propMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>Biaya properti/bln</span><span style="font-weight:700">-${formatRp(Math.round(propMonthlyCost))}</span></div>` : ''}
+          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding:4px 0;color:${(actualMonthlyRent - totalMonthlyCost - propMonthlyCost) >= 0 ? 'var(--success)' : 'var(--danger)'}">
+            <span>Net sewa aktual/bln</span><span>${formatRp(Math.round(actualMonthlyRent - totalMonthlyCost - propMonthlyCost))}</span>
+          </div>
+        </div>` : ''}
+      <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+        ${occupiedUnits.length}/${units.length} terisi · Occupancy ${units.length > 0 ? Math.round(occupiedUnits.length/units.length*100) : 0}%
+      </div>
+    </div>`;
 }
 
 function calcKPR() {
