@@ -634,6 +634,47 @@ body {
 .yield-row.sub span:first-child::before { content: '·'; margin-right: 6px; color: var(--text-muted); }
 .yield-row.highlight { background: var(--bg); margin: 2px -8px; padding: 6px 8px; border-radius: var(--radius-xs); }
 .yield-divider { height: 1px; background: var(--border); margin: 10px 0; }
+.yield-cap-assumption.card { margin-bottom: 16px; border-left: 4px solid var(--primary-light); }
+.yield-cap-hint { font-size: 12px; color: var(--text-muted); line-height: 1.55; margin: 0 0 14px; }
+.yield-cap-hint strong { color: var(--text-secondary); }
+.yield-cap-inputs { display: grid; gap: 12px; }
+.yield-cap-inputs-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 560px) {
+  .yield-cap-inputs-3 { grid-template-columns: 1fr; }
+}
+.yield-cap-field { margin-bottom: 0 !important; }
+.yield-cap-field-hint { display: block; font-size: 10px; color: var(--text-muted); margin-top: 4px; line-height: 1.35; }
+.yield-cap-field-hint em { color: var(--text-secondary); font-style: italic; }
+.yield-cap-micro { font-size: 10px; color: var(--text-muted); line-height: 1.45; margin: 8px 0 0; }
+.yield-cap-cicilan { border-left: 3px solid var(--warning-dark); padding-left: 8px; margin-top: 10px; }
+.yield-cap-override { margin-top: 10px; margin-bottom: 0 !important; }
+.yield-cap-override .form-input { font-size: 14px; }
+.yield-cap-table-note { font-size: 11px; color: var(--text-muted); margin: 0 0 8px; line-height: 1.4; }
+.yield-cap-table-note em { font-style: italic; color: var(--text-secondary); }
+
+.yield-cap-help {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+}
+.yield-cap-help summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  list-style-position: outside;
+}
+.yield-cap-help-body {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.yield-cap-help-body p { margin: 0 0 10px; }
+.yield-cap-help-body p:last-child { margin-bottom: 0; }
+.yield-cap-help-body strong { color: var(--text); }
 .btn-outline {
   width: 100%; padding: 10px; border: 2px solid var(--primary); border-radius: var(--radius-sm);
   background: transparent; color: var(--primary); font-weight: 700; font-size: 13px; cursor: pointer;

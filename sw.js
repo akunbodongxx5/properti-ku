@@ -1,4 +1,4 @@
-const CACHE_NAME = 'propertiKu-v4';
+const CACHE_NAME = 'propertiKu-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -10,10 +10,18 @@ const ASSETS = [
   './icon-512.png'
 ];
 
-// Install — cache app shell
+// Install — cache app shell (each asset optional so one 404 does not abort the whole install)
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        ASSETS.map((url) =>
+          cache.add(url).catch(() => {
+            /* optional asset or offline during first visit */
+          })
+        )
+      )
+    )
   );
   self.skipWaiting();
 });

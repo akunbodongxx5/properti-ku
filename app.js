@@ -1419,6 +1419,62 @@ function renderOverview() {
 }
 
 // ===== YIELD CALCULATOR =====
+function getYieldAppreciationPct() {
+  const v = parseFloat(DB.getVal('yield_cap_appreciation_pct') || '0');
+  if (isNaN(v)) return 0;
+  return Math.min(50, Math.max(-30, v));
+}
+function getYieldHorizonYears() {
+  const v = parseInt(DB.getVal('yield_cap_horizon_years') || '5', 10);
+  if (isNaN(v)) return 5;
+  return Math.min(30, Math.max(1, v));
+}
+/** Asumsi % kenaikan "laba sewa" (Net profit/thn) dari tahun ke tahun untuk total di horizon. */
+function getYieldRentEscalationPct() {
+  const v = parseFloat(DB.getVal('yield_cap_rent_escalation_pct') || '0');
+  if (isNaN(v)) return 0;
+  return Math.min(25, Math.max(-15, v));
+}
+function getYieldCapOverrideMap() {
+  try {
+    const o = JSON.parse(DB.getVal('yield_cap_by_property') || '{}');
+    return typeof o === 'object' && o !== null && !Array.isArray(o) ? o : {};
+  } catch {
+    return {};
+  }
+}
+function effectiveYieldCapPct(propName, globalCap) {
+  const map = getYieldCapOverrideMap();
+  if (Object.prototype.hasOwnProperty.call(map, propName)) {
+    const v = parseFloat(map[propName]);
+    if (!isNaN(v)) return Math.min(50, Math.max(-30, v));
+  }
+  return globalCap;
+}
+function setYieldCapOverrideFromYield(propName, raw) {
+  const map = getYieldCapOverrideMap();
+  const t = String(raw ?? '').trim();
+  if (t === '') {
+    delete map[propName];
+  } else {
+    const v = parseFloat(t);
+    if (isNaN(v)) return;
+    map[propName] = Math.min(50, Math.max(-30, v));
+  }
+  DB.setVal('yield_cap_by_property', JSON.stringify(map));
+  renderYield();
+}
+/** Jumlah laba sewa selama `years` tahun: thn 1 = base, thn berikutnya naik g% dari thn sebelumnya. */
+function cumNetOperasionalOverYears(baseNetAnnual, years, rentEscalationPct) {
+  const n = Math.max(0, Math.floor(years));
+  const g = rentEscalationPct / 100;
+  if (n <= 0) return 0;
+  if (Math.abs(g) < 1e-12) return Math.round(baseNetAnnual * n);
+  let sum = 0;
+  for (let k = 0; k < n; k++) sum += baseNetAnnual * Math.pow(1 + g, k);
+  return Math.round(sum);
+}
+
 function renderYield() {
   const units = getUnits(), payments = getPayments();
   const props = [...new Set(units.map(u=>u.property))];
@@ -1426,10 +1482,51 @@ function renderYield() {
 
   if (!props.length) { container.innerHTML = '<p class="empty-state">Tambahkan properti untuk melihat yield.</p>'; return; }
 
+  const capPct = getYieldAppreciationPct();
+  const capYears = getYieldHorizonYears();
+  const rentEscPct = getYieldRentEscalationPct();
+  const capOverrideMap = getYieldCapOverrideMap();
+
+  const assumptionHtml = `<div class="card yield-cap-assumption">
+    <h3 class="card-title">📐 Asumsi capital gain &amp; sewa</h3>
+    <p class="yield-cap-hint"><strong>Yield operasional</strong> (net) = dari arus kas sewa vs harga beli. <strong>Apresiasi</strong> = asumsi kenaikan nilai aset per tahun — beda jenis return. Angka di bawah hanya skenario, bukan prediksi.</p>
+    <div class="yield-cap-inputs yield-cap-inputs-3">
+      <div class="form-group yield-cap-field">
+        <label class="form-label">Apresiasi harga (default %/thn)</label>
+        <input type="number" step="0.5" min="-30" max="50" class="form-input" id="yield-cap-pct-input"
+          value="${capPct}"
+          onchange="DB.setVal('yield_cap_appreciation_pct', this.value); renderYield();">
+        <small class="yield-cap-field-hint">Bisa dioverride per properti di kartu</small>
+      </div>
+      <div class="form-group yield-cap-field">
+        <label class="form-label">Horizon (tahun)</label>
+        <input type="number" min="1" max="30" class="form-input" id="yield-cap-years-input"
+          value="${capYears}"
+          onchange="DB.setVal('yield_cap_horizon_years', this.value); renderYield();">
+      </div>
+      <div class="form-group yield-cap-field">
+        <label class="form-label">Kenaikan laba sewa tiap tahun (%)</label>
+        <input type="number" step="0.5" min="-15" max="25" class="form-input" id="yield-rent-esc-input"
+          value="${rentEscPct}"
+          onchange="DB.setVal('yield_cap_rent_escalation_pct', this.value); renderYield();">
+        <small class="yield-cap-field-hint">0% = laba dari sewa dianggap sama setiap tahun (paling aman).</small>
+      </div>
+    </div>
+    <details class="yield-cap-help">
+      <summary>Apa maksud &quot;kenaikan laba sewa&quot;?</summary>
+      <div class="yield-cap-help-body">
+        <p><strong>Laba sewa</strong> di sini = angka <strong>Net profit/tahun</strong> di tiap kartu properti: total sewa dikurangi biaya operasional (PBB, maintenance, IPL, dll.) — <strong>belum</strong> mengurangi cicilan bank.</p>
+        <p>Kolom ini menjawab: &quot;Kalau dari tahun ke tahun laba dari sewa bisa naik (misalnya karena naikkan harga sewa), kira-kira naik berapa persen <em>per tahun</em>?&quot;</p>
+        <p><strong>Contoh isi 5%:</strong> tahun ke-1 dipakai laba seperti sekarang. Tahun ke-2 laba dianggap 5% lebih tinggi dari tahun ke-1, tahun ke-3 lagi 5% dari tahun ke-2, dan seterusnya. Semua tahun itu <strong>dijumlahkan</strong> untuk baris &quot;Total laba sewa&quot; di horizon.</p>
+        <p><strong>Isi 0%</strong> jika tidak ingin menebak kenaikan — setiap tahun labanya dianggap sama seperti angka sekarang.</p>
+      </div>
+    </details>
+  </div>`;
+
   // Comparison table
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = '<div class="card"><h3 class="card-title">📊 Perbandingan Yield</h3><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Eff.</th><th>Payback</th></tr></thead><tbody>';
+    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield</h3><p class="yield-cap-table-note">Kolom <strong>Total†</strong> = yield <em>operasional net</em> + apresiasi (per properti: override atau default ${capPct}%/thn). Penjumlahan sederhana, beda jenis return — bukan IRR.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Eff.</th><th>Total†</th><th>Payback</th></tr></thead><tbody>`;
   }
 
   let cardsHtml = props.map(prop => {
@@ -1474,9 +1571,78 @@ function renderYield() {
     const nv = parseFloat(netYield);
     const badgeColor = isNaN(nv) ? 'var(--text-muted)' : nv >= 8 ? 'var(--success)' : nv >= 4 ? 'var(--warning-dark)' : 'var(--danger)';
 
+    const propCapEff = effectiveYieldCapPct(prop, capPct);
+    const usesGlobalCap = !Object.prototype.hasOwnProperty.call(capOverrideMap, prop);
+
     // Add to comparison table
+    const totalAnnualEst = netYield !== '-' ? (parseFloat(netYield) + propCapEff).toFixed(2) : '-';
     if (props.length > 1) {
-      compHtml += `<tr onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')"><td style="font-weight:700">${prop}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td>${paybackLabel}</td></tr>`;
+      compHtml += `<tr onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')"><td style="font-weight:700">${prop}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td style="font-weight:700;color:var(--primary)">${totalAnnualEst !== '-' ? totalAnnualEst + '%' : '-'}</td><td>${paybackLabel}</td></tr>`;
+    }
+
+    let capGainSection = '';
+    if (purchasePrice > 0) {
+      const netYNum = netYield !== '-' ? parseFloat(netYield) : null;
+      const incomeYieldPct = netYNum;
+      const simpleSumPct = netYNum !== null ? (netYNum + propCapEff).toFixed(2) : null;
+
+      const fv = purchasePrice * Math.pow(1 + propCapEff / 100, capYears);
+      const capGainAmt = Math.round(fv - purchasePrice);
+      const cumRent = cumNetOperasionalOverYears(netAnnualProfit, capYears, rentEscPct);
+      const combinedEst = capGainAmt + cumRent;
+
+      const capOvInputVal = Object.prototype.hasOwnProperty.call(capOverrideMap, prop)
+        ? String(capOverrideMap[prop])
+        : '';
+
+      const capSourceLabel = usesGlobalCap
+        ? `default ${capPct}%/thn`
+        : `override ${propCapEff}%/thn`;
+
+      const rentEscLabel = rentEscPct === 0
+        ? 'sama tiap tahun (sesuai Net profit/thn sekarang)'
+        : `laba sewa naik ${rentEscPct >= 0 ? '+' : ''}${rentEscPct}% dari tahun ke tahun`;
+
+      const capOvPh = `Kosong = pakai default (${capPct}%)`.replace(/"/g, '&quot;');
+
+      capGainSection = `
+      <div class="yield-divider"></div>
+      <div class="yield-section-title">🏷 Return operasional vs apresiasi</div>
+      <div class="yield-row sub"><span>Sumber apresiasi</span><span>${capSourceLabel}</span></div>
+      <div class="yield-row highlight"><span>Yield operasional (net)</span><span style="font-weight:800">${incomeYieldPct !== null ? incomeYieldPct.toFixed(2) + '%' : '-'}</span></div>
+      <div class="yield-row sub"><span>Dari arus kas vs harga beli</span><span> </span></div>
+      <div class="yield-row highlight"><span>Apresiasi harga (asumsi/thn)</span><span style="font-weight:800;color:var(--text-secondary)">${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%</span></div>
+      <div class="yield-row sub"><span>Paper return pada nilai aset</span><span> </span></div>
+      ${simpleSumPct !== null ? `<div class="yield-row"><span>Jumlah sederhana (bukan IRR)</span><span style="font-weight:700;color:var(--primary)">${simpleSumPct}%</span></div>
+      <p class="yield-cap-micro">Penjumlahan % hanya ringkasan; operasional vs apresiasi punya basis &amp; makna berbeda.</p>` : ''}
+      <div class="form-group yield-cap-override">
+        <label class="form-label">Override apresiasi % (properti ini)</label>
+        <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${capOvPh}"
+          value="${capOvInputVal.replace(/"/g, '&quot;')}"
+          onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
+      </div>
+      <div class="yield-divider"></div>
+      <div class="yield-section-title">📆 Proyeksi horizon (${capYears} thn)</div>
+      <div class="yield-row"><span>Nilai aset (compound apresiasi)</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
+      <div class="yield-row"><span>Paper gain dari harga</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
+      <div class="yield-row sub"><span>Total laba sewa (${capYears} thn, dijumlahkan)</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
+      <div class="yield-row sub"><span>Cara hitung laba per tahun</span><span>${rentEscLabel}</span></div>
+      <div class="yield-row highlight"><span>Perkiraan gabungan (~)</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
+      <p class="yield-cap-micro">Gabungan = paper gain + total laba sewa di atas. Dasar per tahun = <strong>Net profit/thn</strong> di kartu ini (lihat juga di bawah, setelah Payback). Bukan saran investasi.</p>
+      ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">🏦 Ada cicilan tercatat: angka di atas <strong>tidak</strong> memisahkan pokok/bunga atau perubahan equity dari pelunasan KPR — hanya gambaran kasar.</p>` : ''}`;
+    } else if (capPct !== 0 || Object.prototype.hasOwnProperty.call(capOverrideMap, prop)) {
+      const capOvInputVal = Object.prototype.hasOwnProperty.call(capOverrideMap, prop)
+        ? String(capOverrideMap[prop])
+        : '';
+      const capOvPh = `Kosong = pakai default (${capPct}%)`.replace(/"/g, '&quot;');
+      capGainSection = `<div class="yield-divider"></div>
+      <p class="yield-cap-micro">Isi <strong>harga beli</strong> di pengaturan properti untuk menghitung apresiasi &amp; proyeksi.</p>
+      <div class="form-group yield-cap-override">
+        <label class="form-label">Override apresiasi % (properti ini)</label>
+        <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${capOvPh}"
+          value="${capOvInputVal.replace(/"/g, '&quot;')}"
+          onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
+      </div>`;
     }
 
     return `<div class="yield-card">
@@ -1513,6 +1679,7 @@ function renderYield() {
       <div class="yield-row highlight"><span>Net Yield (ROI)</span><span style="color:var(--primary);font-weight:800;font-size:16px">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
       <div class="yield-row highlight"><span>Effective Yield</span><span style="color:${badgeColor};font-weight:800">${effectiveYield !== '-' ? effectiveYield + '%' : '-'}</span></div>
       <div class="yield-row"><span>Occupancy</span><span>${occRate}% (${occCount}/${pu.length})</span></div>
+      ${capGainSection}
       <div class="yield-divider"></div>
       <div class="yield-row highlight"><span>⏱ Payback Period</span><span style="font-weight:800;color:var(--primary)">${paybackLabel}</span></div>
       <div class="yield-row"><span>Net Profit/thn</span><span style="color:${netAnnualProfit>=0?'var(--success)':'var(--danger)'};font-weight:700">${formatRp(netAnnualProfit)}</span></div>
@@ -1533,7 +1700,7 @@ function renderYield() {
     compHtml += '</tbody></table></div></div>';
   }
 
-  container.innerHTML = compHtml + cardsHtml;
+  container.innerHTML = assumptionHtml + compHtml + cardsHtml;
 }
 
 // ===== OCCUPANCY ANALYTICS =====
@@ -2191,15 +2358,20 @@ function calcKPR() {
 }
 
 function saveKPRToProperty(propName, cicilanPerBulan, sisaTenor) {
-  const props = getProperties();
+  let props = getProperties();
   let prop = props.find(p => p.name === propName);
   if (!prop) {
-    prop = getOrCreateProperty(propName);
-  } else {
-    prop.cicilanPerBulan = cicilanPerBulan;
-    prop.sisaTenor = sisaTenor;
-    saveProperties(props);
+    getOrCreateProperty(propName);
+    props = getProperties();
+    prop = props.find(p => p.name === propName);
   }
+  if (!prop) {
+    alert('Gagal menyimpan: properti tidak ditemukan.');
+    return;
+  }
+  prop.cicilanPerBulan = cicilanPerBulan;
+  prop.sisaTenor = sisaTenor;
+  saveProperties(props);
   alert(`Tersimpan! Cicilan ${formatRpFull(cicilanPerBulan)}/bln (${sisaTenor} bulan) disimpan ke "${propName}".`);
 }
 
