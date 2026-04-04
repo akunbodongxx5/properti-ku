@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <script>
+    try {
+      var _um = localStorage.getItem('propertiKu_ui_mode');
+      document.body.dataset.uiMode = (_um === 'simple' || _um === 'pro') ? _um : 'pro';
+    } catch (e) { document.body.dataset.uiMode = 'pro'; }
+  </script>
   <div id="app">
     <!-- Header -->
     <header class="header">
@@ -37,7 +43,7 @@
       <section id="page-dashboard" class="page active">
         <div id="greeting-container"></div>
         <div class="card">
-          <h3 class="card-title">Cashflow Bulan Ini</h3>
+          <h3 class="card-title" id="dash-cf-title">Cashflow Bulan Ini</h3>
           <div class="cashflow-summary">
             <div class="cashflow-item income">
               <span class="cashflow-label"><span class="dot"></span> Pemasukan</span>
@@ -66,7 +72,7 @@
             <p class="empty-state">Belum ada properti</p>
           </div>
         </div>
-        <div class="card">
+        <div class="card ui-pro-only">
           <h3 class="card-title">ROI per Properti</h3>
           <div id="dashboard-roi" class="list-container">
             <p class="empty-state">Belum ada properti</p>
@@ -109,9 +115,11 @@
       <!-- Reports Page (Yield + Analytics + Multi-property) -->
       <section id="page-reports" class="page">
         <!-- Sub-tabs for reports -->
-        <div class="filter-tabs">
+        <p class="reports-simple-tip">Versi sederhana: ringkasan keuangan saja. Untuk analisis sewa + kenaikan harga, KPR, dan grafik, buka <strong>Pengaturan → Pro</strong>.</p>
+        <div class="filter-tabs ui-pro-only">
           <button class="filter-tab active" onclick="switchReportTab('overview', this)">Overview</button>
           <button class="filter-tab" onclick="switchReportTab('yield', this)">Yield</button>
+          <button class="filter-tab" onclick="switchReportTab('proyeksi', this)">Proyeksi</button>
           <button class="filter-tab" onclick="switchReportTab('analytics', this)">Occupancy</button>
           <button class="filter-tab" onclick="switchReportTab('multi', this)">Per Properti</button>
           <button class="filter-tab" onclick="switchReportTab('kpr', this)">KPR</button>
@@ -130,7 +138,7 @@
               <div class="report-item"><span class="report-label">Pemasukan</span><span class="report-value income" id="rpt-income">Rp 0</span></div>
               <div class="report-item"><span class="report-label">Pengeluaran</span><span class="report-value expense" id="rpt-expense">Rp 0</span></div>
               <div class="report-item"><span class="report-label">Net Profit</span><span class="report-value" id="rpt-net">Rp 0</span></div>
-              <div class="report-item"><span class="report-label">Yield (ROI)</span><span class="report-value" id="rpt-yield">-</span></div>
+              <div class="report-item ui-pro-only"><span class="report-label">Yield sewa <span class="report-label-sub">(vs harga beli)</span></span><span class="report-value" id="rpt-yield">-</span></div>
             </div>
           </div>
           <div class="card">
@@ -143,9 +151,14 @@
           </div>
         </div>
 
-        <!-- Yield Calculator Tab -->
+        <!-- Yield Tab -->
         <div id="rpt-tab-yield" class="rpt-tab">
           <div id="yield-content"></div>
+        </div>
+
+        <!-- Proyeksi Tab -->
+        <div id="rpt-tab-proyeksi" class="rpt-tab">
+          <div id="proyeksi-content"></div>
         </div>
 
         <!-- Occupancy Analytics Tab -->
@@ -211,9 +224,9 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span>Unit</span>
       </button>
-      <button class="nav-item" onclick="navigateTo('reports', this)">
+      <button type="button" class="nav-item" id="nav-reports-btn" onclick="navigateTo('reports', this)">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        <span>Laporan</span>
+        <span id="nav-reports-label">Laporan</span>
       </button>
     </nav>
 

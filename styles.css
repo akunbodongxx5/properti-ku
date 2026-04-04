@@ -329,6 +329,17 @@ body {
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .report-item { display: flex; flex-direction: column; gap: 4px; }
 .report-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.report-label-sub {
+  display: block;
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0.85;
+  margin-top: 2px;
+  font-size: 10px;
+}
+.yield-invest-framing { border-left: 4px solid var(--primary-light); margin-bottom: 14px; }
+.yield-invest-framing .card-title { margin-bottom: 8px; }
 .report-value { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
 .report-value.income { color: var(--success); }
 .report-value.expense { color: var(--danger); }
@@ -651,6 +662,45 @@ body {
 .yield-cap-override .form-input { font-size: 14px; }
 .yield-cap-table-note { font-size: 11px; color: var(--text-muted); margin: 0 0 8px; line-height: 1.4; }
 .yield-cap-table-note em { font-style: italic; color: var(--text-secondary); }
+
+/* Simple vs Pro UI */
+[data-ui-mode="simple"] .ui-pro-only { display: none !important; }
+.reports-simple-tip {
+  display: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--primary-glow);
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--primary);
+}
+[data-ui-mode="simple"] .reports-simple-tip { display: block; }
+.ui-mode-segment {
+  display: flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid var(--border);
+}
+.ui-mode-btn {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s;
+}
+.ui-mode-btn + .ui-mode-btn { border-left: 1px solid var(--border); }
+.ui-mode-btn.active {
+  background: var(--primary);
+  color: white;
+}
+.ui-mode-btn:active:not(.active) { background: var(--bg-card); }
 
 .yield-cap-help {
   margin-top: 14px;
