@@ -1,10 +1,10 @@
 // Bump this + query ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
-const CACHE_NAME = 'propertiKu-v6';
+const CACHE_NAME = 'propertiKu-v7';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=6',
-  './styles.css?v=6',
+  './app.js?v=7',
+  './styles.css?v=7',
   './manifest.json',
   './icon.svg',
   './icon-192.png',

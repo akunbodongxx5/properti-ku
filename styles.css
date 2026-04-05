@@ -315,6 +315,70 @@ body {
 .payment-paid { opacity: 0.6; }
 .payment-paid .list-item-title { text-decoration: line-through; }
 
+/* ===== Payments: grouped by tenant ===== */
+.payment-view-tabs { margin-bottom: 12px; }
+.payment-group {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.payment-group-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 16px;
+  font-weight: 700;
+  color: var(--text);
+  background: linear-gradient(135deg, var(--primary-glow) 0%, transparent 55%);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.payment-group-details > summary::-webkit-details-marker { display: none; }
+.payment-group-summary-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.payment-group-title { font-size: 15px; flex: 1; min-width: 0; text-align: left; }
+.payment-group-chevron {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.payment-group-details[open] > summary .payment-group-chevron { transform: rotate(0deg); }
+.payment-group-details:not([open]) > summary .payment-group-chevron { transform: rotate(-90deg); }
+.payment-group-meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  text-align: left;
+}
+.payment-group-badges { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.payment-group-badges .pg-mini {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.pg-mini-pending { background: var(--warning-light); color: var(--warning-dark); }
+.pg-mini-overdue { background: var(--danger-light); color: var(--danger); }
+.pg-mini-paid { background: var(--success-light); color: var(--success); }
+.payment-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 12px;
+  background: var(--bg);
+}
+.payment-group-items .list-item { animation: none; }
+
 /* ===== Badges ===== */
 .badge {
   display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px;

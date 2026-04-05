@@ -1263,6 +1263,10 @@ function renderTenants() {
 
 // ===== PAYMENT TRACKING =====
 let paymentFilter = 'all';
+let paymentViewMode = (() => {
+  const v = DB.getVal('payment_list_view');
+  return v === 'byTenant' ? 'byTenant' : 'timeline';
+})();
 
 function showExpenseForm() {
   showPaymentForm();
@@ -1356,8 +1360,61 @@ function deletePayment(id) { if (!confirm('Hapus?')) return; savePayments(getPay
 
 function filterPayments(f, btn) {
   paymentFilter = f;
-  document.querySelectorAll('#page-payments .filter-tab').forEach(t=>t.classList.remove('active'));
-  if (btn) btn.classList.add('active'); renderPayments();
+  document.querySelectorAll('#page-payments .filter-tabs:not(.payment-view-tabs) .filter-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPayments();
+}
+
+function setPaymentViewMode(mode, btn) {
+  if (mode !== 'timeline' && mode !== 'byTenant') return;
+  paymentViewMode = mode;
+  DB.setVal('payment_list_view', mode);
+  document.querySelectorAll('.payment-view-tabs .filter-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.payView === mode);
+  });
+  renderPayments();
+}
+
+function paymentRowHtml(p, tenants) {
+  const t = tenants.find(x => x.id === p.tenantId);
+  const st = { paid: { b: 'badge-success', l: '✅ Lunas' }, pending: { b: 'badge-warning', l: '⏳ Pending' }, overdue: { b: 'badge-danger', l: '⚠️ Nunggak' } }[p.status] || { b: 'badge-warning', l: '⏳ Pending' };
+  const isExp = p.type === 'expense';
+  const isPaid = p.status === 'paid';
+  const dl = daysUntil(p.dueDate);
+  const dueLabel = isPaid ? `Dibayar ${p.paidDate ? formatDate(p.paidDate) : ''}` : dl < 0 ? `Terlambat ${Math.abs(dl)} hari` : dl === 0 ? 'Jatuh tempo HARI INI' : dl <= 5 ? `H-${dl} hari lagi` : `Due: ${formatDate(p.dueDate)}`;
+  const dueColor = isPaid ? 'var(--success)' : dl <= 0 ? 'var(--danger)' : dl <= 5 ? '#d97706' : 'var(--text-muted)';
+  const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid(${onclickStrArg(p.id)}, event)" title="${isPaid ? 'Batalkan' : 'Tandai Lunas'}">
+      ${isPaid ? '✅' : '☐'}
+    </button>` : '';
+  return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm(${onclickStrArg(p.id)})">
+      <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
+        ${toggleBtn}
+        <div style="flex:1;min-width:0">
+          <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(t?.name || 'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
+          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || 'Sewa ' + p.period)}</div>
+          <div class="list-item-row" style="margin-top:6px">
+            <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
+            <span style="font-weight:800;font-size:15px;color:${isExp ? 'var(--danger)' : 'var(--success)'}">${isExp ? '-' : '+'}${formatRpFull(p.amount)}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function paymentGroupBadgeRow(items) {
+  const nOverdue = items.filter(p => p.status === 'overdue').length;
+  const nPending = items.filter(p => p.status === 'pending').length;
+  const nPaid = items.filter(p => p.status === 'paid').length;
+  let html = '';
+  if (nOverdue) html += `<span class="pg-mini pg-mini-overdue">${nOverdue} nunggak</span>`;
+  if (nPending) html += `<span class="pg-mini pg-mini-pending">${nPending} pending</span>`;
+  if (nPaid) html += `<span class="pg-mini pg-mini-paid">${nPaid} lunas</span>`;
+  return html ? `<div class="payment-group-badges">${html}</div>` : '';
+}
+
+function paymentGroupDefaultOpen(items) {
+  if (paymentFilter === 'paid' || paymentFilter === 'pending' || paymentFilter === 'overdue') return true;
+  return items.some(p => p.status === 'pending' || p.status === 'overdue');
 }
 
 function quickTogglePaid(id, ev) {
@@ -1379,37 +1436,78 @@ function quickTogglePaid(id, ev) {
 }
 
 function renderPayments() {
-  const payments = getPayments(), tenants = getTenants();
+  const payments = getPayments(), tenants = getTenants(), units = getUnits();
   updateOverduePayments();
-  const filtered = paymentFilter==='all' ? payments : payments.filter(p=>p.status===paymentFilter);
-  const sorted = [...filtered].sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const filtered = paymentFilter === 'all' ? payments : payments.filter(p => p.status === paymentFilter);
+  const sorted = [...filtered].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   const container = document.getElementById('payment-list');
-  if (sorted.length===0) { container.innerHTML = emptyStateHTML('payment'); return; }
-  container.innerHTML = sorted.map(p => {
-    const t = tenants.find(x=>x.id===p.tenantId);
-    const st = {paid:{b:'badge-success',l:'✅ Lunas'},pending:{b:'badge-warning',l:'⏳ Pending'},overdue:{b:'badge-danger',l:'⚠️ Nunggak'}}[p.status]||{b:'badge-warning',l:'⏳ Pending'};
-    const isExp = p.type==='expense';
-    const isPaid = p.status === 'paid';
-    const dl = daysUntil(p.dueDate);
-    const dueLabel = isPaid ? `Dibayar ${p.paidDate ? formatDate(p.paidDate) : ''}` : dl < 0 ? `Terlambat ${Math.abs(dl)} hari` : dl === 0 ? 'Jatuh tempo HARI INI' : dl <= 5 ? `H-${dl} hari lagi` : `Due: ${formatDate(p.dueDate)}`;
-    const dueColor = isPaid ? 'var(--success)' : dl <= 0 ? 'var(--danger)' : dl <= 5 ? '#d97706' : 'var(--text-muted)';
 
-    const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid(${onclickStrArg(p.id)}, event)" title="${isPaid ? 'Batalkan' : 'Tandai Lunas'}">
-      ${isPaid ? '✅' : '☐'}
-    </button>` : '';
+  document.querySelectorAll('.payment-view-tabs .filter-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.payView === paymentViewMode);
+  });
 
-    return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm(${onclickStrArg(p.id)})">
-      <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
-        ${toggleBtn}
-        <div style="flex:1;min-width:0">
-          <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(t?.name || 'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
-          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || 'Sewa ' + p.period)}</div>
-          <div class="list-item-row" style="margin-top:6px">
-            <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
-            <span style="font-weight:800;font-size:15px;color:${isExp?'var(--danger)':'var(--success)'}">${isExp?'-':'+'}${formatRpFull(p.amount)}</span>
+  if (sorted.length === 0) { container.innerHTML = emptyStateHTML('payment'); return; }
+
+  if (paymentViewMode === 'timeline') {
+    container.innerHTML = sorted.map(p => paymentRowHtml(p, tenants)).join('');
+    return;
+  }
+
+  const groupMap = new Map();
+  for (const p of sorted) {
+    let key;
+    if (p.type === 'expense') key = '_expenses';
+    else if (p.tenantId) key = p.tenantId;
+    else key = '_income_loose';
+    if (!groupMap.has(key)) groupMap.set(key, { key, items: [] });
+    groupMap.get(key).items.push(p);
+  }
+
+  const tenantKeys = [...groupMap.keys()].filter(k => k !== '_expenses' && k !== '_income_loose');
+  tenantKeys.sort((a, b) => {
+    const na = tenants.find(t => t.id === a)?.name || '';
+    const nb = tenants.find(t => t.id === b)?.name || '';
+    return naturalSort(na, nb);
+  });
+  const orderKeys = [...tenantKeys];
+  if (groupMap.has('_income_loose')) orderKeys.push('_income_loose');
+  if (groupMap.has('_expenses')) orderKeys.push('_expenses');
+
+  container.innerHTML = orderKeys.map(k => {
+    const { items } = groupMap.get(k);
+    let titleText, metaLine;
+
+    if (k === '_expenses') {
+      titleText = 'Pengeluaran & umum';
+      metaLine = `${items.length} transaksi`;
+    } else if (k === '_income_loose') {
+      titleText = 'Sewa tanpa penyewa terhubung';
+      metaLine = `${items.length} tagihan — hubungkan ke penyewa di edit tagihan`;
+    } else {
+      const t = tenants.find(x => x.id === k);
+      const u = t ? units.find(x => x.id === t.unitId) : null;
+      titleText = t?.name || 'Penyewa (data hilang)';
+      metaLine = u ? `${u.property} · ${u.name}` : (t ? 'Belum ada unit terpasang' : '');
+    }
+
+    const openAttr = paymentGroupDefaultOpen(items) ? ' open' : '';
+    const badges = paymentGroupBadgeRow(items);
+    const rows = items.map(p => paymentRowHtml(p, tenants)).join('');
+
+    return `<div class="payment-group">
+      <details class="payment-group-details"${openAttr}>
+        <summary>
+          <div class="payment-group-summary-top">
+            <span class="payment-group-title">${escapeHtml(titleText)}</span>
+            <span class="payment-group-chevron" aria-hidden="true">▼</span>
           </div>
-        </div>
-      </div>
+          <div class="payment-group-meta">
+            ${metaLine ? `<div>${escapeHtml(metaLine)}</div>` : ''}
+            ${badges}
+          </div>
+        </summary>
+        <div class="payment-group-items">${rows}</div>
+      </details>
     </div>`;
   }).join('');
 }

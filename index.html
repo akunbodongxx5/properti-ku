@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <script>
@@ -95,6 +95,10 @@
           <button class="filter-tab" onclick="filterPayments('pending', this)">Belum Bayar</button>
           <button class="filter-tab" onclick="filterPayments('paid', this)">Lunas</button>
           <button class="filter-tab" onclick="filterPayments('overdue', this)">Nunggak</button>
+        </div>
+        <div class="filter-tabs sub-filter payment-view-tabs">
+          <button type="button" class="filter-tab active" data-pay-view="timeline" onclick="setPaymentViewMode('timeline', this)">Urut tanggal</button>
+          <button type="button" class="filter-tab" data-pay-view="byTenant" onclick="setPaymentViewMode('byTenant', this)">Per penyewa</button>
         </div>
         <div id="payment-list" class="list-container"></div>
       </section>
@@ -247,10 +251,10 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=6').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=7').then((reg) => {
         console.log('SW registered:', reg.scope);
       }).catch((err) => {
         console.log('SW registration failed:', err);
