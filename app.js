@@ -1543,7 +1543,7 @@ function renderYield() {
   // Comparison table
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield Sewa</h3><p class="yield-cap-table-note"><strong>Gross / Net / Eff.</strong> = murni dari pendapatan sewa vs harga beli. Proyeksi apresiasi lihat tab <strong>Proyeksi</strong>.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Eff.</th><th>Payback</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield Sewa</h3><p class="yield-cap-table-note"><strong>Gross / Net / Eff.</strong> dihitung dari pendapatan sewa. Untuk proyeksi kenaikan nilai, buka tab <strong>Proyeksi</strong>.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Eff.</th><th>Payback</th></tr></thead><tbody>`;
   }
 
   let cardsHtml = props.map(prop => {
@@ -1699,7 +1699,7 @@ function renderProyeksi() {
   // Comparison table (multi-property)
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan (${capYears} thn)</h3><p class="yield-cap-table-note">Klik properti untuk atur asumsi per properti.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Net Yield</th><th>Apresiasi</th><th>Return/thn</th><th>Kenaikan Nilai</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan (${capYears} thn)</h3><p class="yield-cap-table-note">Klik baris untuk mengatur asumsi per properti.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Net Yield</th><th>Apresiasi</th><th>Return/thn</th><th>Kenaikan Nilai</th></tr></thead><tbody>`;
   }
 
   const cardsHtml = props.map(prop => {
@@ -1770,7 +1770,7 @@ function renderProyeksi() {
       <div class="yield-row highlight"><span>Kenaikan nilai (estimasi)</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
       <div class="yield-row sub"><span>Akumulasi laba sewa (${capYears} thn, ${rentEscLabel})</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
       <div class="yield-row highlight"><span>Total estimasi keuntungan</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
-      <p class="yield-cap-micro">Kenaikan nilai aset + akumulasi laba sewa. Angka ini estimasi berdasarkan asumsi di atas, bukan jaminan.</p>
+      <p class="yield-cap-micro">Kenaikan nilai + akumulasi laba sewa selama ${capYears} tahun — angka kasar, bisa beda di realita.</p>
       ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">🏦 Ada cicilan KPR — belum diperhitungkan dalam proyeksi ini.</p>` : ''}`;
     } else {
       capGainSection = `
