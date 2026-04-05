@@ -102,6 +102,23 @@ function naturalSort(a, b) {
   return 0;
 }
 
+/** Escape text for safe insertion into HTML (mitigates XSS from user data). */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+/** JSON string literal safe inside a double-quoted HTML onclick/href attribute. */
+function onclickStrArg(val) {
+  return JSON.stringify(val == null ? '' : String(val))
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
 // ===== Toast Notifications =====
 function showToast(msg, type = 'success', duration = 2500) {
   const container = document.getElementById('toast-container');
@@ -109,7 +126,7 @@ function showToast(msg, type = 'success', duration = 2500) {
   const icons = { success: '&#10003;', error: '&#10007;', info: '&#8505;', warning: '&#9888;' };
   const toast = document.createElement('div');
   toast.className = 'toast';
-  toast.innerHTML = `<div class="toast-icon ${type}">${icons[type] || icons.info}</div><div class="toast-msg">${msg}</div>`;
+  toast.innerHTML = `<div class="toast-icon ${type}">${icons[type] || icons.info}</div><div class="toast-msg">${escapeHtml(msg)}</div>`;
   container.appendChild(toast);
   setTimeout(() => {
     toast.classList.add('toast-out');
@@ -171,7 +188,7 @@ function loadDummyData() {
     { id:'du1', property:'Kos Melati', subtype:'Standar', name:'Kamar A', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC,Kamar Mandi Dalam', status:'occupied', createdAt:now.toISOString() },
     { id:'du2', property:'Kos Melati', subtype:'Standar', name:'Kamar B', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC,Kamar Mandi Dalam', status:'occupied', createdAt:now.toISOString() },
     { id:'du3', property:'Kos Melati', subtype:'Standar', name:'Kamar C', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC', status:'vacant', createdAt:now.toISOString() },
-    { id:'du4', property:'Kos Melati', subtype:'Standar', name:'Kamar D', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC', status:'overdue', createdAt:now.toISOString() },
+    { id:'du4', property:'Kos Melati', subtype:'Standar', name:'Kamar D', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC', status:'occupied', createdAt:now.toISOString() },
     { id:'du5', property:'Ruko Sudirman', subtype:'Unit', name:'Unit Utama', type:'ruko', price:8000000, billingCycle:'monthly', ipl:500000, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'', status:'occupied', createdAt:now.toISOString() }
   ]);
 
@@ -954,7 +971,7 @@ function renderUnits() {
   // Remove props with no filtered units
   const visibleProps = propOrder.filter(p => groups[p].length > 0);
 
-  if (visibleProps.length === 0) { container.innerHTML = `<p class="empty-state">${searchTerm ? 'Tidak ditemukan unit "' + searchTerm + '"' : 'Tidak ada unit yang cocok dengan filter.'}</p>`; return; }
+  if (visibleProps.length === 0) { container.innerHTML = `<p class="empty-state">${searchTerm ? 'Tidak ditemukan unit "' + escapeHtml(searchTerm) + '"' : 'Tidak ada unit yang cocok dengan filter.'}</p>`; return; }
 
   container.innerHTML = visibleProps.map(prop => {
     const propUnits = groups[prop];
@@ -972,21 +989,21 @@ function renderUnits() {
     if (!collapsed) {
       unitsHtml = subtypes.map(sub => {
         const subUnits = propUnits.filter(u => (u.subtype || '') === sub).sort((a, b) => naturalSort(a.name, b.name));
-        const subLabel = sub ? `<div class="prop-subtype-label">${sub}</div>` : '';
+        const subLabel = sub ? `<div class="prop-subtype-label">${escapeHtml(sub)}</div>` : '';
         const subItems = subUnits.map(u => {
-          const facs = u.facilities ? u.facilities.split(',').filter(Boolean).slice(0, 4).map(f => `<span class="facility-tag">${getFacilityLabel(f.trim())}</span>`).join('') : '';
+          const facs = u.facilities ? u.facilities.split(',').filter(Boolean).slice(0, 4).map(f => `<span class="facility-tag">${escapeHtml(getFacilityLabel(f.trim()))}</span>`).join('') : '';
           const extraFacs = u.facilities ? u.facilities.split(',').filter(Boolean).length - 4 : 0;
           const floorColor = getFloorColor(u.name);
           const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="Lantai"></span>` : '';
           const hasPhotos = getUnitPhotos().some(p => p.unitId === u.id);
           const hasHistory = getTenantHistory().some(h => h.unitId === u.id);
-          return `<div class="unit-item unit-${u.status}" onclick="showUnitForm('${u.id}')">
+          return `<div class="unit-item unit-${u.status}" onclick="showUnitForm(${onclickStrArg(u.id)})">
             <div class="unit-item-left">
               ${floorDot}
-              <span class="unit-item-name">${u.name}</span>
+              <span class="unit-item-name">${escapeHtml(u.name)}</span>
               <span class="badge badge-sm ${u.status === 'occupied' ? 'badge-success' : 'badge-warning'}">${u.status === 'occupied' ? 'Terisi' : 'Kosong'}</span>
-              ${hasPhotos ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitPhotos(\'' + u.id + '\')" title="Lihat Foto">📷</span>' : ''}
-              ${hasHistory ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitHistory(\'' + u.id + '\')" title="Riwayat Penyewa">📜</span>' : ''}
+              ${hasPhotos ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitPhotos(' + onclickStrArg(u.id) + ')" title="Lihat Foto">📷</span>' : ''}
+              ${hasHistory ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitHistory(' + onclickStrArg(u.id) + ')" title="Riwayat Penyewa">📜</span>' : ''}
             </div>
             <div class="unit-item-right">
               <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?'thn':'bln'}</span></span>
@@ -1000,15 +1017,15 @@ function renderUnits() {
     }
 
     return `<div class="prop-group">
-      <div class="prop-group-header" onclick="togglePropertyGroup('${prop.replace(/'/g, "\\'")}')">
+      <div class="prop-group-header" onclick="togglePropertyGroup(${onclickStrArg(prop)})">
         <div class="prop-group-info">
-          <div class="prop-group-name">${icons[type] || '🏠'} ${prop}</div>
+          <div class="prop-group-name">${icons[type] || '🏠'} ${escapeHtml(prop)}</div>
           <div class="prop-group-stats">${occCount}/${totalCount} terisi · ${formatRp(monthlyIncome)}/bln</div>
         </div>
         <div class="prop-group-actions">
-          <button class="prop-action-btn add" onclick="event.stopPropagation(); addUnitForProperty('${prop.replace(/'/g, "\\'")}')" title="Tambah Unit">+</button>
-          ${isProMode() ? `<button class="prop-action-btn bulk" onclick="event.stopPropagation(); showBulkAddForm('${prop.replace(/'/g, "\\'")}')" title="Tambah Massal">⊞</button>` : ''}
-          <button class="prop-action-btn settings" onclick="event.stopPropagation(); showPropertySettings('${prop.replace(/'/g, "\\'")}')" title="Pengaturan Properti">⚙</button>
+          <button class="prop-action-btn add" onclick="event.stopPropagation(); addUnitForProperty(${onclickStrArg(prop)})" title="Tambah Unit">+</button>
+          ${isProMode() ? `<button class="prop-action-btn bulk" onclick="event.stopPropagation(); showBulkAddForm(${onclickStrArg(prop)})" title="Tambah Massal">⊞</button>` : ''}
+          <button class="prop-action-btn settings" onclick="event.stopPropagation(); showPropertySettings(${onclickStrArg(prop)})" title="Pengaturan Properti">⚙</button>
           <span class="prop-group-chevron ${collapsed ? 'collapsed' : ''}">▼</span>
         </div>
       </div>
@@ -1227,19 +1244,19 @@ function renderTenants() {
   const q = (document.getElementById('search-tenant')?.value||'').toLowerCase();
   const filtered = tenants.filter(t => t.name.toLowerCase().includes(q));
   const container = document.getElementById('tenant-list');
-  if (filtered.length === 0) { container.innerHTML = q ? '<p class="empty-state">Tidak ditemukan penyewa "' + q + '"</p>' : emptyStateHTML('tenant'); return; }
+  if (filtered.length === 0) { container.innerHTML = q ? '<p class="empty-state">Tidak ditemukan penyewa "' + escapeHtml(q) + '"</p>' : emptyStateHTML('tenant'); return; }
   container.innerHTML = filtered.map(t => {
     const unit = units.find(u=>u.id===t.unitId);
     const dl = daysUntil(t.endDate);
     let badge = dl < 0 ? '<span class="badge badge-danger">Expired</span>' : dl <= 30 ? `<span class="badge badge-warning">${dl}d</span>` : '<span class="badge badge-success">Aktif</span>';
-    const ini = t.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    return `<div class="list-item" onclick="showTenantForm('${t.id}')">
+    const ini = escapeHtml(t.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+    return `<div class="list-item" onclick="showTenantForm(${onclickStrArg(t.id)})">
       <div style="display:flex;gap:14px;align-items:center">
         <div style="width:44px;height:44px;border-radius:14px;background:var(--gradient);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:15px;flex-shrink:0">${ini}</div>
         <div style="flex:1;min-width:0">
-          <div class="list-item-header" style="margin-bottom:4px"><span class="list-item-title">${t.name}</span>${badge}</div>
-          <div class="list-item-subtitle" style="margin-bottom:2px">${unit?`${unit.property} — ${unit.name}`:'Unit ?'}</div>
-          <div class="list-item-row"><span class="list-item-detail">${formatDate(t.startDate)} — ${formatDate(t.endDate)}</span><span class="list-item-detail">${t.phone||''}</span></div>
+          <div class="list-item-header" style="margin-bottom:4px"><span class="list-item-title">${escapeHtml(t.name)}</span>${badge}</div>
+          <div class="list-item-subtitle" style="margin-bottom:2px">${unit ? escapeHtml(unit.property + ' — ' + unit.name) : 'Unit ?'}</div>
+          <div class="list-item-row"><span class="list-item-detail">${formatDate(t.startDate)} — ${formatDate(t.endDate)}</span><span class="list-item-detail">${escapeHtml(t.phone || '')}</span></div>
         </div></div></div>`;
   }).join('');
 }
@@ -1365,7 +1382,7 @@ function renderPayments() {
   const payments = getPayments(), tenants = getTenants();
   updateOverduePayments();
   const filtered = paymentFilter==='all' ? payments : payments.filter(p=>p.status===paymentFilter);
-  const sorted = filtered.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const sorted = [...filtered].sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const container = document.getElementById('payment-list');
   if (sorted.length===0) { container.innerHTML = emptyStateHTML('payment'); return; }
   container.innerHTML = sorted.map(p => {
@@ -1377,16 +1394,16 @@ function renderPayments() {
     const dueLabel = isPaid ? `Dibayar ${p.paidDate ? formatDate(p.paidDate) : ''}` : dl < 0 ? `Terlambat ${Math.abs(dl)} hari` : dl === 0 ? 'Jatuh tempo HARI INI' : dl <= 5 ? `H-${dl} hari lagi` : `Due: ${formatDate(p.dueDate)}`;
     const dueColor = isPaid ? 'var(--success)' : dl <= 0 ? 'var(--danger)' : dl <= 5 ? '#d97706' : 'var(--text-muted)';
 
-    const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid('${p.id}', event)" title="${isPaid ? 'Batalkan' : 'Tandai Lunas'}">
+    const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid(${onclickStrArg(p.id)}, event)" title="${isPaid ? 'Batalkan' : 'Tandai Lunas'}">
       ${isPaid ? '✅' : '☐'}
     </button>` : '';
 
-    return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm('${p.id}')">
+    return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm(${onclickStrArg(p.id)})">
       <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
         ${toggleBtn}
         <div style="flex:1;min-width:0">
-          <div class="list-item-header"><span class="list-item-title">${isExp ? getExpenseCategoryLabel(p.expenseCategory || 'other') : '💰'} ${isExp?'':(t?.name||'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
-          <div class="list-item-subtitle">${p.propertyName||'-'} · ${p.description||'Sewa '+p.period}</div>
+          <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(t?.name || 'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
+          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || 'Sewa ' + p.period)}</div>
           <div class="list-item-row" style="margin-top:6px">
             <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
             <span style="font-weight:800;font-size:15px;color:${isExp?'var(--danger)':'var(--success)'}">${isExp?'-':'+'}${formatRpFull(p.amount)}</span>
@@ -1434,7 +1451,7 @@ function renderDashboard() {
   else dc.innerHTML = pending.map(p => {
     const t = tenants.find(x=>x.id===p.tenantId), d = daysUntil(p.dueDate);
     const lbl = d<0 ? `<span class="overdue-tag">Terlambat ${Math.abs(d)} hari</span>` : `<span class="upcoming-tag">${d} hari lagi</span>`;
-    return `<div class="due-item"><div class="due-info"><span class="due-name">${t?.name||'Pengeluaran'}</span><span class="due-detail">${p.propertyName||'-'} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
+    return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(t?.name || 'Pengeluaran')}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
   }).join('');
 
   // ROI Cards (Pro saja)
@@ -1452,7 +1469,7 @@ function renderDashboard() {
     const pu = units.filter(u=>u.property===prop), po = pu.filter(u=>u.status==='occupied').length, pt = pu.length;
     const o = pt>0?Math.round((po/pt)*100):0, circ = 2*Math.PI*16, off = circ-(o/100)*circ;
     const col = o>=80?'var(--success)':o>=50?'var(--warning-dark)':'var(--danger)';
-    return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${prop}</span>
+    return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${escapeHtml(prop)}</span>
       <span class="property-mini-detail">${po}/${pt} terisi · ${formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0))}/bln</span></div>
       <div class="occ-ring"><svg width="44" height="44" viewBox="0 0 44 44">
         <circle cx="22" cy="22" r="16" fill="none" stroke="var(--border)" stroke-width="4"/>
@@ -1529,18 +1546,20 @@ function renderOverview() {
       const i = pp.filter(p=>p.propertyName===pr&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0);
       const e = pp.filter(p=>p.propertyName===pr&&p.type==='expense').reduce((s,p)=>s+p.amount,0);
       const pf = i-e, bw = mx>0?Math.abs(pf)/mx*100:0, pos = pf>=0;
-      return `<div class="pnl-row"><div class="pnl-header"><span class="pnl-name">${pr}</span><span class="pnl-profit ${pos?'positive':'negative'}">${pos?'+':''}${formatRpFull(pf)}</span></div>
+      return `<div class="pnl-row"><div class="pnl-header"><span class="pnl-name">${escapeHtml(pr)}</span><span class="pnl-profit ${pos?'positive':'negative'}">${pos?'+':''}${formatRpFull(pf)}</span></div>
         <div class="pnl-bar"><div class="pnl-bar-fill ${pos?'positive':'negative'}" style="width:${bw}%"></div></div></div>`;
     }).join('');
   }
 
   // Transactions
-  const sorted = pp.sort((a,b)=>new Date(b.dueDate)-new Date(a.dueDate)).slice(0,20);
+  const sorted = [...pp].sort((a,b)=>new Date(b.dueDate)-new Date(a.dueDate)).slice(0,20);
   const tx = document.getElementById('report-transactions');
   if (!sorted.length) tx.innerHTML = '<p class="empty-state">Belum ada transaksi</p>';
   else tx.innerHTML = sorted.map(p => {
     const isE = p.type==='expense';
-    return `<div class="tx-item"><div class="tx-info"><span class="tx-desc">${isE?'💸':'💰'} ${p.description||(isE?'Pengeluaran':'Sewa')} — ${p.propertyName||'-'}</span>
+    const desc = escapeHtml(p.description || (isE ? 'Pengeluaran' : 'Sewa'));
+    const propNm = escapeHtml(p.propertyName || '-');
+    return `<div class="tx-item"><div class="tx-info"><span class="tx-desc">${isE?'💸':'💰'} ${desc} — ${propNm}</span>
       <span class="tx-date">${formatDate(p.dueDate)} · ${p.status==='paid'?'Lunas':'Pending'}</span></div>
       <span class="tx-amount ${isE?'expense':'income'}">${isE?'-':'+'}${formatRp(p.amount)}</span></div>`;
   }).join('');
@@ -1613,7 +1632,7 @@ function renderYield() {
   // Comparison table
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield Sewa</h3><p class="yield-cap-table-note"><strong>Gross / Net / Eff.</strong> dihitung dari pendapatan sewa. Untuk proyeksi kenaikan nilai, buka tab <strong>Proyeksi</strong>.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Eff.</th><th>Payback</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield Sewa</h3><p class="yield-cap-table-note"><strong>Gross</strong> &amp; <strong>Net</strong> dari sewa aktual (unit terisi). <strong>Penuh</strong> = net yield jika semua unit terisi pada tarif tertera. Proyeksi nilai aset ada di tab <strong>Proyeksi</strong>.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Penuh</th><th>Payback</th></tr></thead><tbody>`;
   }
 
   let cardsHtml = props.map(prop => {
@@ -1631,6 +1650,7 @@ function renderYield() {
     const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
     const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
     const yearIncome = monthlyRent * 12;
+    const yearIncomeIfFull = potentialRent * 12;
 
     // Recorded operational expenses from payments
     const cy = getYear();
@@ -1646,7 +1666,8 @@ function renderYield() {
 
     const grossYield = purchasePrice > 0 ? ((yearIncome / purchasePrice) * 100).toFixed(2) : '-';
     const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(2) : '-';
-    const effectiveYield = (netYield !== '-' && occRate > 0) ? ((yearIncome - totalAnnualExpense) / purchasePrice * (occRate/100) * 100).toFixed(2) : netYield;
+    const fullNetYieldNum = purchasePrice > 0 ? ((yearIncomeIfFull - totalAnnualExpense) / purchasePrice) * 100 : NaN;
+    const effectiveYield = purchasePrice > 0 && !isNaN(fullNetYieldNum) ? fullNetYieldNum.toFixed(2) : '-';
 
     const netAnnualProfit = yearIncome - totalAnnualExpense;
     const cashflowAfterCicilan = yearIncome - totalWithCicilan;
@@ -1660,12 +1681,12 @@ function renderYield() {
 
     // Add to comparison table
     if (props.length > 1) {
-      compHtml += `<tr onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')"><td style="font-weight:700">${prop}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td>${paybackLabel}</td></tr>`;
+      compHtml += `<tr onclick="showPropertySettings(${onclickStrArg(prop)})"><td style="font-weight:700">${escapeHtml(prop)}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td>${paybackLabel}</td></tr>`;
     }
 
-    return `<div class=”yield-card”>
+    return `<div class="yield-card">
       <div class="yield-card-header">
-        <span class="yield-card-name">${prop}</span>
+        <span class="yield-card-name">${escapeHtml(prop)}</span>
         <span class="yield-card-badge" style="background:${badgeColor}20;color:${badgeColor}">${netYield !== '-' ? 'Sewa net ' + netYield + '%' : 'Belum diisi'}</span>
       </div>
       <div class="yield-section-title">💰 Investasi</div>
@@ -1695,7 +1716,7 @@ function renderYield() {
       <div class="yield-section-title">📊 Pilar ke-1: dari sewa (yield)</div>
       <div class="yield-row highlight"><span>Gross yield sewa</span><span style="font-weight:800">${grossYield !== '-' ? grossYield + '%' : '-'}</span></div>
       <div class="yield-row highlight"><span>Net yield sewa</span><span style="color:var(--primary);font-weight:800;font-size:16px">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
-      <div class="yield-row highlight"><span>Effective yield sewa</span><span style="color:${badgeColor};font-weight:800">${effectiveYield !== '-' ? effectiveYield + '%' : '-'}</span></div>
+      <div class="yield-row highlight"><span>Net yield (100% okupansi)</span><span style="color:${badgeColor};font-weight:800">${effectiveYield !== '-' ? effectiveYield + '%' : '-'}</span></div>
       <div class="yield-row"><span>Occupancy</span><span>${occRate}% (${occCount}/${pu.length})</span></div>
       <div class="yield-divider"></div>
       <div class="yield-row highlight"><span>⏱ Payback Period</span><span style="font-weight:800;color:var(--primary)">${paybackLabel}</span></div>
@@ -1708,7 +1729,7 @@ function renderYield() {
         <div class="yield-row"><span>Status</span><span style="font-weight:700;color:${monthlyCashflow>=0?'var(--success)':'var(--danger)'}">${monthlyCashflow>=0?'✅ Positif — sewa menutupi cicilan':'⚠️ Negatif — perlu topup '+formatRp(Math.abs(monthlyCashflow))+'/bln'}</span></div>
       ` : ''}
       <div style="margin-top:14px">
-        <button class="btn btn-outline" onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')">⚙ Atur Investasi & Biaya</button>
+        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">⚙ Atur Investasi & Biaya</button>
       </div>
     </div>`;
   }).join('');
@@ -1799,8 +1820,8 @@ function renderProyeksi() {
     // Comparison row
     if (props.length > 1) {
       const paperGain = purchasePrice > 0 ? Math.round(purchasePrice * (Math.pow(1 + propCapEff/100, capYears) - 1)) : null;
-      compHtml += `<tr onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')">
-        <td style="font-weight:700">${prop}</td>
+      compHtml += `<tr onclick="showPropertySettings(${onclickStrArg(prop)})">
+        <td style="font-weight:700">${escapeHtml(prop)}</td>
         <td>${netYield !== '-' ? netYield+'%' : '-'}</td>
         <td>${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(1)}%</td>
         <td style="font-weight:700;color:var(--primary)">${simpleSumPct !== '-' ? simpleSumPct+'%' : '-'}</td>
@@ -1831,7 +1852,7 @@ function renderProyeksi() {
         <label class="form-label">Kenaikan harga khusus properti ini</label>
         <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${capOvPh}"
           value="${capOvInputVal.replace(/"/g, '&quot;')}"
-          onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
+          onchange="setYieldCapOverrideFromYield(${onclickStrArg(prop)}, this.value)">
       </div>
       <div class="yield-divider"></div>
       <div class="yield-section-title">📆 Proyeksi ${capYears} Tahun</div>
@@ -1848,20 +1869,20 @@ function renderProyeksi() {
         <label class="form-label">Kenaikan harga khusus properti ini</label>
         <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="Kosong = default (${capPct}%)"
           value="${(Object.prototype.hasOwnProperty.call(capOverrideMap, prop) ? String(capOverrideMap[prop]) : '').replace(/"/g, '&quot;')}"
-          onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
+          onchange="setYieldCapOverrideFromYield(${onclickStrArg(prop)}, this.value)">
       </div>
       <p class="yield-cap-micro">Isi harga beli di pengaturan properti untuk melihat proyeksi lengkap.</p>`;
     }
 
     return `<div class="yield-card">
       <div class="yield-card-header">
-        <span class="yield-card-name">${prop}</span>
+        <span class="yield-card-name">${escapeHtml(prop)}</span>
         <span class="yield-card-badge" style="background:var(--primary-10,#0d948820);color:var(--primary)">${capYears} thn horizon</span>
       </div>
       <div class="yield-section-title">📈 Proyeksi Kenaikan Nilai</div>
       ${capGainSection}
       <div style="margin-top:14px">
-        <button class="btn btn-outline" onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')">⚙ Atur Investasi & Biaya</button>
+        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">⚙ Atur Investasi & Biaya</button>
       </div>
     </div>`;
   }).join('');
@@ -1969,9 +1990,9 @@ function renderMultiProperty() {
     const type = pu[0]?.type || 'kos';
     const icons = { kos:'🏠', apartemen:'🏢', rumah:'🏡', ruko:'🏪', kantor:'🏛' };
 
-    return `<div class="mp-card" onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')">
+    return `<div class="mp-card" onclick="showPropertySettings(${onclickStrArg(prop)})">
       <div class="mp-card-header">
-        <span class="mp-card-name">${icons[type]||'🏠'} ${prop}</span>
+        <span class="mp-card-name">${icons[type]||'🏠'} ${escapeHtml(prop)}</span>
         <span class="mp-card-type">${type} · ${pu.length} unit</span>
       </div>
       <div class="mp-stats">
@@ -2024,7 +2045,7 @@ function renderKPRSimulator() {
           <option value="">Custom / Manual</option>
           ${props.map(p => {
             const pd = getPropertyData(p);
-            return `<option value="${p}" ${d.selectedProperty === p ? 'selected' : ''}>${p}${pd.purchasePrice ? ' — ' + formatRp(pd.purchasePrice) : ''}</option>`;
+            return `<option value="${escapeHtml(p)}" ${d.selectedProperty === p ? 'selected' : ''}>${escapeHtml(p)}${pd.purchasePrice ? ' — ' + formatRp(pd.purchasePrice) : ''}</option>`;
           }).join('')}
         </select></div>` : ''}
 
@@ -2468,8 +2489,8 @@ function calcKPR() {
   if (selectedProp) {
     saveBtn = `<div class="card" style="text-align:center;padding:16px">
       <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Simpan hasil simulasi ke pengaturan properti?</p>
-      <button class="btn btn-primary" onclick="saveKPRToProperty('${selectedProp.replace(/'/g,"\\'")}', ${Math.round(monthlyFixed)}, ${totalMonths})">
-        📥 Simpan Cicilan ke ${selectedProp}
+      <button class="btn btn-primary" onclick="saveKPRToProperty(${onclickStrArg(selectedProp)}, ${Math.round(monthlyFixed)}, ${totalMonths})">
+        📥 Simpan Cicilan ke ${escapeHtml(selectedProp)}
       </button>
       <small style="display:block;margin-top:8px;color:var(--text-muted)">Cicilan ${formatRpFull(Math.round(monthlyFixed))}/bln · ${totalMonths} bulan akan disimpan</small>
     </div>`;
@@ -2550,7 +2571,6 @@ function showPropertySettings(propName) {
   const pd = getPropertyData(propName);
   const units = getUnits();
   const subtypes = [...new Set(units.filter(u => u.property === propName && u.subtype).map(u => u.subtype))];
-  const esc = s => s.replace(/'/g, "\\'");
 
   let subtypeHtml = '';
   if (subtypes.length > 0) {
@@ -2562,12 +2582,12 @@ function showPropertySettings(propName) {
           const tplInfo = tpl ? `${formatRp(tpl.price)}/bln · ${facCount} fasilitas` : 'Belum ada template';
           return `<div class="subtype-manage-item">
           <div class="subtype-manage-info">
-            <span class="subtype-manage-name">${s}</span>
-            <span class="subtype-manage-detail">${tplInfo}</span>
+            <span class="subtype-manage-name">${escapeHtml(s)}</span>
+            <span class="subtype-manage-detail">${escapeHtml(tplInfo)}</span>
           </div>
           <div class="subtype-manage-actions">
-            <button type="button" class="subtype-btn rename" onclick="renameSubtype('${esc(propName)}','${esc(s)}')" title="Rename">✏️</button>
-            <button type="button" class="subtype-btn delete" onclick="deleteSubtype('${esc(propName)}','${esc(s)}')" title="Hapus">🗑️</button>
+            <button type="button" class="subtype-btn rename" onclick="renameSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="Rename">✏️</button>
+            <button type="button" class="subtype-btn delete" onclick="deleteSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="Hapus">🗑️</button>
           </div>
         </div>`;
         }).join('')}
@@ -2576,7 +2596,7 @@ function showPropertySettings(propName) {
   }
 
   openModal(`⚙ Pengaturan — ${propName}`, `
-    <form onsubmit="savePropertySettings(event, '${esc(propName)}')">
+    <form onsubmit="savePropertySettings(event, ${onclickStrArg(propName)})">
       <div class="form-group"><label class="form-label">Nama Properti</label>
         <input class="form-input" name="propName" value="${propName}" required>
         <small style="color:var(--text-muted);font-size:12px">Ubah nama properti ini</small></div>
@@ -2616,7 +2636,7 @@ function showPropertySettings(propName) {
       <button type="submit" class="btn btn-primary">Simpan</button>
     </form>
     <div class="prop-settings-divider"></div>
-    <button class="btn btn-danger" onclick="deleteProperty('${esc(propName)}')">🗑️ Hapus Properti & Semua Unit</button>
+    <button class="btn btn-danger" onclick="deleteProperty(${onclickStrArg(propName)})">🗑️ Hapus Properti & Semua Unit</button>
   `);
   setTimeout(() => initRpInputs(), 50);
 }
@@ -2639,6 +2659,12 @@ function savePropertySettings(e, oldPropName) {
     // Check duplicate
     if (props.some(p => p.name === newPropName && p.name !== oldPropName)) {
       alert('Nama properti sudah dipakai'); return;
+    }
+    const capMap = getYieldCapOverrideMap();
+    if (Object.prototype.hasOwnProperty.call(capMap, oldPropName)) {
+      capMap[newPropName] = capMap[oldPropName];
+      delete capMap[oldPropName];
+      DB.setVal('yield_cap_by_property', JSON.stringify(capMap));
     }
     // Update units
     const units = getUnits();
@@ -2678,6 +2704,12 @@ function deleteProperty(propName) {
     ? `Hapus properti "${propName}" beserta ${units.length} unit di dalamnya?\n\nPenyewa terkait akan kehilangan unit. Data ini tidak bisa di-undo.`
     : `Hapus properti "${propName}"?`;
   if (!confirm(msg)) return;
+
+  const capMap = getYieldCapOverrideMap();
+  if (Object.prototype.hasOwnProperty.call(capMap, propName)) {
+    delete capMap[propName];
+    DB.setVal('yield_cap_by_property', JSON.stringify(capMap));
+  }
 
   // Remove units
   const allUnits = getUnits().filter(u => u.property !== propName);
@@ -2743,16 +2775,16 @@ function showBulkAddForm(propName) {
   const type = units.find(u => u.property === propName)?.type || 'kos';
 
   openModal('Tambah Unit Massal', `
-    <form onsubmit="saveBulkUnits(event, '${propName.replace(/'/g,"\\'")}')">
+    <form onsubmit="saveBulkUnits(event, ${onclickStrArg(propName)})">
       <div class="card" style="background:var(--primary-glow);padding:14px;margin-bottom:16px;border-radius:12px">
-        <div style="font-size:13px;color:var(--primary);font-weight:700">📦 ${propName}</div>
+        <div style="font-size:13px;color:var(--primary);font-weight:700">📦 ${escapeHtml(propName)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Otomatis generate banyak unit sekaligus</div>
       </div>
 
       <div class="form-group"><label class="form-label">Blok / Sub-tipe</label>
-        <select class="form-select" name="subtypeSelect" id="bulk-subtype" onchange="onBulkSubtypeChange(this.value, '${propName.replace(/'/g,"\\'")}')">
+        <select class="form-select" name="subtypeSelect" id="bulk-subtype" onchange="onBulkSubtypeChange(this.value, ${onclickStrArg(propName)})">
           <option value="">Tanpa blok/sub-tipe</option>
-          ${existingSubtypes.map(s => `<option value="${s}">${s}</option>`).join('')}
+          ${existingSubtypes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
           <option value="__new__">+ Tambah baru...</option>
         </select>
         <input class="form-input" id="bulk-new-subtype" placeholder="Nama sub-tipe baru..." style="margin-top:8px;display:none">
@@ -2985,7 +3017,9 @@ function showSettings() {
         <strong>Step 3 — Test & Simpan</strong><br>
         1. Klik <strong>"🧪 Test Koneksi"</strong> untuk verifikasi<br>
         2. Klik <strong>"Simpan Pengaturan"</strong><br>
-        3. Gunakan <strong>"📨 Kirim Reminder"</strong> kapan saja!
+        3. Gunakan <strong>"📨 Kirim Reminder"</strong> kapan saja!<br>
+        <br>
+        <em style="color:var(--text-muted)">Jika test gagal dengan error jaringan/CORS: buka app lewat server lokal (http://) atau hosting, bukan file:// — API Telegram membutuhkan fetch dari origin yang diizinkan browser.</em>
       </div>
     </div>
 
@@ -3036,7 +3070,7 @@ async function fetchTelegramChatId() {
     const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
     const data = await res.json();
     if (!data.ok) {
-      statusEl.innerHTML = `<span style="color:var(--danger)">❌ Token tidak valid: ${data.description || 'Error'}</span>`;
+      statusEl.innerHTML = `<span style="color:var(--danger)">❌ Token tidak valid: ${escapeHtml(data.description || 'Error')}</span>`;
       return;
     }
     if (!data.result || data.result.length === 0) {
@@ -3049,12 +3083,12 @@ async function fetchTelegramChatId() {
     const chatName = lastMsg.message?.chat?.first_name || lastMsg.message?.chat?.title || 'Unknown';
     if (chatId) {
       document.getElementById('tg-chatid-input').value = chatId;
-      statusEl.innerHTML = `<span style="color:var(--success)">✅ Chat ID ditemukan: <strong>${chatId}</strong> (${chatName})</span>`;
+      statusEl.innerHTML = `<span style="color:var(--success)">✅ Chat ID ditemukan: <strong>${escapeHtml(String(chatId))}</strong> (${escapeHtml(String(chatName))})</span>`;
     } else {
       statusEl.innerHTML = '<span style="color:var(--danger)">❌ Tidak bisa menemukan Chat ID. Coba kirim pesan baru ke bot.</span>';
     }
   } catch (err) {
-    statusEl.innerHTML = `<span style="color:var(--danger)">❌ Error: ${err.message}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--danger)">❌ Error: ${escapeHtml(err.message)}</span>`;
   }
 }
 
@@ -3079,10 +3113,10 @@ async function testTelegramConnection() {
     if (data.ok) {
       resultEl.innerHTML = '<div class="settings-info" style="background:#f0fdf4;color:var(--success)">✅ Berhasil! Cek Telegram kamu — pesan test sudah terkirim. Klik "Simpan" untuk menyimpan pengaturan.</div>';
     } else {
-      resultEl.innerHTML = `<div class="settings-info" style="background:#fef2f2;color:var(--danger)">❌ Gagal: ${data.description || 'Unknown error'}</div>`;
+      resultEl.innerHTML = `<div class="settings-info" style="background:#fef2f2;color:var(--danger)">❌ Gagal: ${escapeHtml(data.description || 'Unknown error')}</div>`;
     }
   } catch (err) {
-    resultEl.innerHTML = `<div class="settings-info" style="background:#fef2f2;color:var(--danger)">❌ Error: ${err.message}</div>`;
+    resultEl.innerHTML = `<div class="settings-info" style="background:#fef2f2;color:var(--danger)">❌ Error: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -3158,6 +3192,37 @@ async function autoReminderCheck() {
 }
 
 // ===== EXPORT / IMPORT =====
+const BACKUP_ARRAY_KEYS = ['properties', 'units', 'tenants', 'payments', 'tenantHistory', 'subtypeTemplates', 'unitPhotos'];
+
+function validateBackupImport(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { ok: false, msg: 'File bukan objek JSON yang valid.' };
+  }
+  const keys = Object.keys(data).filter(k => k.startsWith('propertiKu_'));
+  if (keys.length === 0) {
+    return { ok: false, msg: 'Tidak ada data PropertiKu (kunci propertiKu_*).' };
+  }
+  for (const k of keys) {
+    const v = data[k];
+    if (typeof v !== 'string') {
+      return { ok: false, msg: 'Format backup tidak dikenali: nilai harus berupa string (export asli PropertiKu).' };
+    }
+  }
+  for (const short of BACKUP_ARRAY_KEYS) {
+    const full = 'propertiKu_' + short;
+    if (data[full] === undefined) continue;
+    try {
+      const parsed = JSON.parse(data[full]);
+      if (!Array.isArray(parsed)) {
+        return { ok: false, msg: `Data "${short}" rusak: harus berupa array.` };
+      }
+    } catch {
+      return { ok: false, msg: `Data "${short}" bukan JSON array yang valid.` };
+    }
+  }
+  return { ok: true, keys };
+}
+
 function exportData() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -3186,10 +3251,13 @@ function importData() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        const keys = Object.keys(data).filter(k => k.startsWith('propertiKu_'));
-        if (keys.length === 0) { alert('File tidak valid — tidak ada data PropertiKu.'); return; }
-        if (!confirm(`Import ${keys.length} data? Data saat ini akan ditimpa.`)) return;
-        keys.forEach(k => localStorage.setItem(k, data[k]));
+        const check = validateBackupImport(data);
+        if (!check.ok) {
+          alert(check.msg);
+          return;
+        }
+        if (!confirm(`Import ${check.keys.length} data? Data saat ini akan ditimpa.`)) return;
+        check.keys.forEach(k => localStorage.setItem(k, data[k]));
         alert('Data berhasil diimport! App akan reload.');
         location.reload();
       } catch (err) {
@@ -3247,14 +3315,14 @@ function showUnitHistory(unitId) {
   const currentTenant = getTenants().find(t => t.unitId === unitId);
   const archived = getTenantHistory().filter(h => h.unitId === unitId).sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
 
-  let html = '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">' + unit.property + ' — ' + unit.name + '</div>';
+  let html = '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">' + escapeHtml(unit.property + ' — ' + unit.name) + '</div>';
 
   if (currentTenant) {
     html += '<div class="card" style="padding:12px;border-radius:10px;margin-bottom:12px;border-left:4px solid var(--success)">';
     html += '<div style="font-weight:700;color:var(--success);font-size:13px;margin-bottom:4px">Penyewa Saat Ini</div>';
-    html += '<div style="font-weight:700">' + currentTenant.name + '</div>';
+    html += '<div style="font-weight:700">' + escapeHtml(currentTenant.name) + '</div>';
     html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(currentTenant.startDate) + ' — ' + formatDate(currentTenant.endDate) + '</div>';
-    if (currentTenant.phone) html += '<div style="font-size:12px;color:var(--text-muted)">' + currentTenant.phone + '</div>';
+    if (currentTenant.phone) html += '<div style="font-size:12px;color:var(--text-muted)">' + escapeHtml(currentTenant.phone) + '</div>';
     html += '</div>';
   } else {
     html += '<div style="padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;text-align:center;color:var(--text-muted);font-size:13px">Unit sedang kosong</div>';
@@ -3264,7 +3332,7 @@ function showUnitHistory(unitId) {
     html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text-secondary)">Riwayat Penyewa</div>';
     archived.forEach(h => {
       html += '<div class="card" style="padding:10px;border-radius:8px;margin-bottom:8px;border-left:4px solid var(--border)">';
-      html += '<div style="font-weight:600;font-size:13px">' + h.name + '</div>';
+      html += '<div style="font-weight:600;font-size:13px">' + escapeHtml(h.name) + '</div>';
       html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(h.startDate) + ' — ' + formatDate(h.endDate) + '</div>';
       html += '<div style="font-size:11px;color:var(--text-muted)">Diarsipkan: ' + formatDate(h.archivedAt) + '</div>';
       html += '</div>';

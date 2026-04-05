@@ -6,18 +6,18 @@ $root = $PSScriptRoot
 if (-not $root) { $root = Get-Location }
 
 $mimeTypes = @{
-  ".html" = "text/html; charset=utf-8"
-  ".css"  = "text/css; charset=utf-8"
-  ".js"   = "application/javascript; charset=utf-8"
-  ".json" = "application/json; charset=utf-8"
-  ".webmanifest" = "application/manifest+json"
-  ".png"  = "image/png"
-  ".jpg"  = "image/jpeg"
-  ".jpeg" = "image/jpeg"
-  ".svg"  = "image/svg+xml"
-  ".ico"  = "image/x-icon"
-  ".woff" = "font/woff"
-  ".woff2" = "font/woff2"
+  '.html' = 'text/html; charset=utf-8'
+  '.css'  = 'text/css; charset=utf-8'
+  '.js'   = 'application/javascript; charset=utf-8'
+  '.json' = 'application/json; charset=utf-8'
+  '.webmanifest' = 'application/manifest+json'
+  '.png'  = 'image/png'
+  '.jpg'  = 'image/jpeg'
+  '.jpeg' = 'image/jpeg'
+  '.svg'  = 'image/svg+xml'
+  '.ico'  = 'image/x-icon'
+  '.woff' = 'font/woff'
+  '.woff2' = 'font/woff2'
 }
 
 $listener = $null
@@ -29,13 +29,13 @@ for ($i = 0; $i -lt 40; $i++) {
   $l = $null
   try {
     $l = New-Object System.Net.HttpListener
-    # localhost + IPv4 + IPv6 loopback — hindari "connection failed" saat browser pakai ::1
+    # localhost + IPv4 + IPv6 loopback (hindari gagal koneksi saat browser pakai ::1)
     $l.Prefixes.Add("http://localhost:$tryPort/")
     $l.Prefixes.Add("http://127.0.0.1:$tryPort/")
     try {
       $l.Prefixes.Add("http://[::1]:$tryPort/")
     } catch {
-      # IPv6 tidak tersedia — abaikan
+      # IPv6 tidak tersedia - abaikan
     }
     $l.Start()
     $listener = $l
@@ -68,7 +68,7 @@ if ($port -ne $preferredPort) {
 }
 
 Write-Host ""
-Write-Host " PropertiKu — server aktif" -ForegroundColor Green
+Write-Host " PropertiKu - server aktif" -ForegroundColor Green
 Write-Host "   http://localhost:$port/" -ForegroundColor White
 Write-Host "   http://127.0.0.1:$port/" -ForegroundColor White
 Write-Host ""
@@ -93,7 +93,7 @@ try {
     $rootFull = [IO.Path]::GetFullPath($root)
     if (-not $filePath.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
       $res.StatusCode = 403
-      $bytes = [Text.Encoding]::UTF8.GetBytes("Forbidden")
+      $bytes = [Text.Encoding]::UTF8.GetBytes('Forbidden')
       $res.OutputStream.Write($bytes, 0, $bytes.Length)
       $res.Close()
       continue
@@ -101,13 +101,13 @@ try {
 
     if (Test-Path -LiteralPath $filePath -PathType Leaf) {
       $ext = [IO.Path]::GetExtension($filePath).ToLowerInvariant()
-      $contentType = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { "application/octet-stream" }
+      $contentType = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { 'application/octet-stream' }
       $res.ContentType = $contentType
       $bytes = [IO.File]::ReadAllBytes($filePath)
       $res.OutputStream.Write($bytes, 0, $bytes.Length)
     } else {
       $res.StatusCode = 404
-      $bytes = [Text.Encoding]::UTF8.GetBytes("Not Found")
+      $bytes = [Text.Encoding]::UTF8.GetBytes('Not Found')
       $res.OutputStream.Write($bytes, 0, $bytes.Length)
     }
     $res.Close()

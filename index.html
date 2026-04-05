@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <script>
@@ -247,10 +247,10 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=6"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=6').then((reg) => {
         console.log('SW registered:', reg.scope);
       }).catch((err) => {
         console.log('SW registration failed:', err);
