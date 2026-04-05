@@ -1663,18 +1663,12 @@ function renderProyeksi() {
   const rentEscPct = getYieldRentEscalationPct();
   const capOverrideMap = getYieldCapOverrideMap();
 
-  const framingHtml = `<div class="card yield-framing-card">
-    <h3 class="card-title">💡 Properti = 2 pilar return</h3>
-    <p class="yield-cap-micro">Investasi properti punya <strong>dua sumber keuntungan</strong> yang berbeda jenisnya:</p>
-    <div class="yield-row sub"><span>1️⃣ Yield sewa</span><span>uang masuk tiap bulan — lihat tab <strong>Yield</strong></span></div>
-    <div class="yield-row sub"><span>2️⃣ Apresiasi harga</span><span>paper gain saat aset naik nilainya — tab ini</span></div>
-    <p class="yield-cap-micro" style="margin-top:8px">Tab ini fokus ke pilar ke-2: proyeksi kenaikan nilai aset + kombinasi kasar keduanya di akhir horizon. Bukan IRR, bukan saran investasi.</p>
-  </div>`;
+  const framingHtml = '';
 
   const assumptionHtml = `<div class="card">
-    <h3 class="card-title">⚙️ Asumsi Proyeksi</h3>
+    <h3 class="card-title">⚙️ Asumsi</h3>
     <div class="form-group">
-      <label class="form-label">Apresiasi harga / tahun (default semua properti)</label>
+      <label class="form-label">Kenaikan harga aset / tahun</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-cap-pct" step="0.5" min="-30" max="50" class="form-input" style="max-width:120px"
           value="${capPct}"
@@ -1683,7 +1677,7 @@ function renderProyeksi() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Horizon proyeksi</label>
+      <label class="form-label">Jangka waktu proyeksi</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-horizon" step="1" min="1" max="30" class="form-input" style="max-width:120px"
           value="${capYears}"
@@ -1692,7 +1686,7 @@ function renderProyeksi() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Kenaikan laba sewa / tahun <span style="font-weight:400;color:var(--text-muted)">(eskalasi sewa)</span></label>
+      <label class="form-label">Kenaikan laba sewa / tahun</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-esc" step="0.5" min="-15" max="25" class="form-input" style="max-width:120px"
           value="${rentEscPct}"
@@ -1705,7 +1699,7 @@ function renderProyeksi() {
   // Comparison table (multi-property)
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Proyeksi (${capYears} thn)</h3><p class="yield-cap-table-note">Net yield sewa dari tab Yield + asumsi apresiasi — <strong>dua sumber berbeda</strong> dijumlahkan sederhana, bukan IRR. Klik baris untuk atur per properti.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Net Yield</th><th>Apresiasi</th><th>Gabungan†</th><th>Paper Gain</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan (${capYears} thn)</h3><p class="yield-cap-table-note">Klik properti untuk atur asumsi per properti.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Net Yield</th><th>Apresiasi</th><th>Return/thn</th><th>Kenaikan Nilai</th></tr></thead><tbody>`;
   }
 
   const cardsHtml = props.map(prop => {
@@ -1756,18 +1750,15 @@ function renderProyeksi() {
 
       const capOvInputVal = Object.prototype.hasOwnProperty.call(capOverrideMap, prop) ? String(capOverrideMap[prop]) : '';
       const capOvPh = `Kosong = pakai default (${capPct}%)`.replace(/"/g, '&quot;');
-      const capSourceLabel = usesGlobalCap ? `default ${capPct}%/thn` : `override ${propCapEff}%/thn`;
       const rentEscLabel = rentEscPct === 0
-        ? 'sama tiap tahun (dari Net profit/thn sekarang)'
-        : `laba sewa naik ${rentEscPct >= 0 ? '+' : ''}${rentEscPct}% per tahun`;
+        ? 'tetap tiap tahun'
+        : `naik ${rentEscPct >= 0 ? '+' : ''}${rentEscPct}%/thn`;
 
       capGainSection = `
-      <div class="yield-row sub"><span>Sumber asumsi apresiasi</span><span>${capSourceLabel}</span></div>
-      <div class="yield-row highlight"><span>Apresiasi / tahun (asumsi)</span><span style="font-weight:800;color:var(--text-secondary)">${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%</span></div>
-      ${netYNum !== null ? `<div class="yield-row"><span>Gabungan kasar % (sewa + apresiasi)</span><span style="font-weight:700;color:var(--primary)">${simpleSumPct}%</span></div>
-      <p class="yield-cap-micro"><strong>${incomeYieldPct.toFixed(2)}%</strong> (net sewa) + <strong>${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%</strong> (apresiasi) — dua pilar, bukan satu definisi yield.</p>` : ''}
+      <div class="yield-row highlight"><span>Kenaikan harga / tahun</span><span style="font-weight:800;color:var(--text-secondary)">${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%${usesGlobalCap ? '' : ' <span style="font-size:10px;color:var(--text-muted)">(custom)</span>'}</span></div>
+      ${netYNum !== null ? `<div class="yield-row"><span>Estimasi return / tahun</span><span style="font-weight:700;color:var(--primary)">${simpleSumPct}%</span></div>` : ''}
       <div class="form-group yield-cap-override">
-        <label class="form-label">Override apresiasi % (properti ini)</label>
+        <label class="form-label">Kenaikan harga khusus properti ini</label>
         <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${capOvPh}"
           value="${capOvInputVal.replace(/"/g, '&quot;')}"
           onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
@@ -1775,21 +1766,21 @@ function renderProyeksi() {
       <div class="yield-divider"></div>
       <div class="yield-section-title">📆 Proyeksi ${capYears} Tahun</div>
       <div class="yield-row"><span>Harga beli</span><span style="font-weight:700">${formatRpFull(purchasePrice)}</span></div>
-      <div class="yield-row"><span>Nilai aset (compound apresiasi)</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
-      <div class="yield-row highlight"><span>Paper gain dari harga</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
-      <div class="yield-row sub"><span>Total laba sewa (${capYears} thn, ${rentEscLabel})</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
-      <div class="yield-row highlight"><span>Perkiraan gabungan (~)</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
-      <p class="yield-cap-micro"><strong>Rupiah gabungan</strong> = paper gain (apresiasi) + total laba sewa selama horizon. Sewa ≠ apresiasi — ini estimasi kasar, bukan IRR, bukan saran investasi.</p>
-      ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">🏦 Ada cicilan tercatat: angka di atas tidak memisahkan pokok/bunga atau equity dari pelunasan KPR.</p>` : ''}`;
+      <div class="yield-row"><span>Estimasi nilai aset</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
+      <div class="yield-row highlight"><span>Kenaikan nilai (estimasi)</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
+      <div class="yield-row sub"><span>Akumulasi laba sewa (${capYears} thn, ${rentEscLabel})</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
+      <div class="yield-row highlight"><span>Total estimasi keuntungan</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
+      <p class="yield-cap-micro">Kenaikan nilai aset + akumulasi laba sewa. Angka ini estimasi berdasarkan asumsi di atas, bukan jaminan.</p>
+      ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">🏦 Ada cicilan KPR — belum diperhitungkan dalam proyeksi ini.</p>` : ''}`;
     } else {
       capGainSection = `
       <div class="form-group yield-cap-override">
-        <label class="form-label">Override apresiasi % (properti ini)</label>
+        <label class="form-label">Kenaikan harga khusus properti ini</label>
         <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="Kosong = default (${capPct}%)"
           value="${(Object.prototype.hasOwnProperty.call(capOverrideMap, prop) ? String(capOverrideMap[prop]) : '').replace(/"/g, '&quot;')}"
           onchange="setYieldCapOverrideFromYield('${prop.replace(/'/g,"\\'")}', this.value)">
       </div>
-      <p class="yield-cap-micro">Isi <strong>harga beli</strong> di pengaturan properti untuk menghitung proyeksi apresiasi.</p>`;
+      <p class="yield-cap-micro">Isi harga beli di pengaturan properti untuk melihat proyeksi lengkap.</p>`;
     }
 
     return `<div class="yield-card">
@@ -1797,7 +1788,7 @@ function renderProyeksi() {
         <span class="yield-card-name">${prop}</span>
         <span class="yield-card-badge" style="background:var(--primary-10,#0d948820);color:var(--primary)">${capYears} thn horizon</span>
       </div>
-      <div class="yield-section-title">🏷 Apresiasi Harga Aset</div>
+      <div class="yield-section-title">📈 Proyeksi Kenaikan Nilai</div>
       ${capGainSection}
       <div style="margin-top:14px">
         <button class="btn btn-outline" onclick="showPropertySettings('${prop.replace(/'/g,"\\'")}')">⚙ Atur Investasi & Biaya</button>
