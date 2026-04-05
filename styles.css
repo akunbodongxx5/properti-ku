@@ -1043,10 +1043,20 @@ body {
   animation: cardAppear 0.5s ease backwards; animation-delay: 0.65s;
 }
 .onboarding-btn:active { transform: scale(0.97); }
+.onboarding-btn-demo {
+  margin-top: 10px; padding: 13px 28px; border: 2px solid var(--primary);
+  border-radius: var(--radius-sm); background: transparent; color: var(--primary);
+  font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; max-width: 300px;
+  font-family: inherit; transition: all 0.2s ease;
+  animation: cardAppear 0.5s ease backwards; animation-delay: 0.75s;
+}
+.onboarding-btn-demo:hover { background: var(--primary-glow); }
+.onboarding-btn-demo:active { transform: scale(0.97); }
 .onboarding-skip {
   margin-top: 16px; background: none; border: none; color: var(--text-muted);
   font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px;
 }
+.empty-demo-btn { margin-top: 10px; font-size: 13px; }
 
 /* ===== Unit item color bar ===== */
 .unit-item.unit-occupied { border-left: 3px solid var(--success); }

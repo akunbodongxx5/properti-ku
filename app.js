@@ -124,7 +124,7 @@ function emptyStateHTML(type) {
       svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="12" y="28" width="56" height="40" rx="4" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M12 36h56" stroke="var(--text-muted)" stroke-width="2"/><rect x="24" y="44" width="12" height="16" rx="2" stroke="var(--text-muted)" stroke-width="2"/><rect x="44" y="44" width="12" height="8" rx="2" stroke="var(--text-muted)" stroke-width="2"/><path d="M40 12L8 28h64L40 12z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
       title: 'Belum Ada Unit',
       desc: 'Mulai tambah unit properti kamu — kos, apartemen, rumah, atau ruko.',
-      action: `<button class="btn btn-primary" onclick="showUnitForm(); closeFabMenu()">+ Tambah Unit Pertama</button>`
+      action: `<button class="btn btn-primary" onclick="showUnitForm(); closeFabMenu()">+ Tambah Unit Pertama</button><button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">📦 Coba Data Contoh</button>`
     },
     tenant: {
       svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><circle cx="40" cy="28" r="14" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M16 68c0-13.255 10.745-24 24-24s24 10.745 24 24" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
@@ -142,7 +142,7 @@ function emptyStateHTML(type) {
       svg: `<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="8" y="24" width="48" height="32" rx="3" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M32 8L4 24h56L32 8z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
       title: 'Belum Ada Properti',
       desc: 'Tambahkan properti pertama kamu untuk mulai.',
-      action: ''
+      action: `<button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">📦 Coba Data Contoh</button>`
     }
   };
   const s = states[type] || states.property;
@@ -150,6 +150,75 @@ function emptyStateHTML(type) {
 }
 
 // ===== Onboarding =====
+function loadDummyData() {
+  if (getUnits().length > 0) return;
+
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const fmt = d => d.toISOString().slice(0,10);
+  const period = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const mAgo = n => new Date(y, m-n, 1);
+  const mFwd = n => new Date(y, m+n, 1);
+
+  const cur = period(now), p1 = period(mAgo(1)), p2 = period(mAgo(2));
+
+  DB.set('properties', [
+    { name:'Kos Melati', purchasePrice:850000000, pbb:1500000, maintenance:3000000, insurance:0, otherExpense:0, cicilanPerBulan:0, sisaTenor:0 },
+    { name:'Ruko Sudirman', purchasePrice:2000000000, pbb:5000000, maintenance:6000000, insurance:2000000, otherExpense:0, cicilanPerBulan:12000000, sisaTenor:84 }
+  ]);
+
+  DB.set('units', [
+    { id:'du1', property:'Kos Melati', subtype:'Standar', name:'Kamar A', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC,Kamar Mandi Dalam', status:'occupied', createdAt:now.toISOString() },
+    { id:'du2', property:'Kos Melati', subtype:'Standar', name:'Kamar B', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC,Kamar Mandi Dalam', status:'occupied', createdAt:now.toISOString() },
+    { id:'du3', property:'Kos Melati', subtype:'Standar', name:'Kamar C', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC', status:'vacant', createdAt:now.toISOString() },
+    { id:'du4', property:'Kos Melati', subtype:'Standar', name:'Kamar D', type:'kos', price:1500000, billingCycle:'monthly', ipl:0, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'AC', status:'overdue', createdAt:now.toISOString() },
+    { id:'du5', property:'Ruko Sudirman', subtype:'Unit', name:'Unit Utama', type:'ruko', price:8000000, billingCycle:'monthly', ipl:500000, sinkingFund:0, unitPbb:0, unitOtherCost:0, facilities:'', status:'occupied', createdAt:now.toISOString() }
+  ]);
+
+  DB.set('tenants', [
+    { id:'dt1', name:'Budi Santoso', phone:'081234567890', unitId:'du1', startDate:fmt(mAgo(3)), endDate:fmt(mFwd(9)), dueDay:5, deposit:1500000, notes:'', createdAt:now.toISOString() },
+    { id:'dt2', name:'Sari Dewi', phone:'082345678901', unitId:'du2', startDate:fmt(mAgo(3)), endDate:fmt(mFwd(2)), dueDay:10, deposit:1500000, notes:'Kontrak hampir habis', createdAt:now.toISOString() },
+    { id:'dt3', name:'Ahmad Rizki', phone:'083456789012', unitId:'du4', startDate:fmt(mAgo(3)), endDate:fmt(mFwd(5)), dueDay:1, deposit:0, notes:'Sering telat bayar', createdAt:now.toISOString() },
+    { id:'dt4', name:'PT. Maju Bersama', phone:'021-5551234', unitId:'du5', startDate:fmt(mAgo(3)), endDate:fmt(mFwd(9)), dueDay:1, deposit:8000000, notes:'Tenant komersial', createdAt:now.toISOString() }
+  ]);
+
+  const pmts = [];
+  const addPmt = (id, tenantId, prop, amount, pr, dd, status, desc) => pmts.push({
+    id, type:'income', tenantId, propertyName:prop, amount, period:pr,
+    dueDate:dd, status, description:desc, autoGenerated:true, billingCycle:'monthly', createdAt:now.toISOString()
+  });
+
+  // Budi — lunas 3 bulan terakhir
+  addPmt('dp_b1','dt1','Kos Melati',1500000,p2,fmt(new Date(y,m-2,5)),'paid','Sewa Kamar A — Budi Santoso');
+  addPmt('dp_b2','dt1','Kos Melati',1500000,p1,fmt(new Date(y,m-1,5)),'paid','Sewa Kamar A — Budi Santoso');
+  addPmt('dp_b3','dt1','Kos Melati',1500000,cur,fmt(new Date(y,m,5)),'paid','Sewa Kamar A — Budi Santoso');
+
+  // Sari — lunas 2 bulan, pending bulan ini
+  addPmt('dp_s1','dt2','Kos Melati',1500000,p2,fmt(new Date(y,m-2,10)),'paid','Sewa Kamar B — Sari Dewi');
+  addPmt('dp_s2','dt2','Kos Melati',1500000,p1,fmt(new Date(y,m-1,10)),'paid','Sewa Kamar B — Sari Dewi');
+  addPmt('dp_s3','dt2','Kos Melati',1500000,cur,fmt(new Date(y,m,10)),'pending','Sewa Kamar B — Sari Dewi');
+
+  // Ahmad — lunas 2 bulan lalu, overdue 2 bulan terakhir
+  addPmt('dp_a1','dt3','Kos Melati',1500000,p2,fmt(new Date(y,m-2,1)),'paid','Sewa Kamar D — Ahmad Rizki');
+  addPmt('dp_a2','dt3','Kos Melati',1500000,p1,fmt(new Date(y,m-1,1)),'overdue','Sewa Kamar D — Ahmad Rizki');
+  addPmt('dp_a3','dt3','Kos Melati',1500000,cur,fmt(new Date(y,m,1)),'overdue','Sewa Kamar D — Ahmad Rizki');
+
+  // Ruko — lunas semua
+  addPmt('dp_r1','dt4','Ruko Sudirman',8000000,p2,fmt(new Date(y,m-2,1)),'paid','Sewa Unit Utama — PT. Maju Bersama');
+  addPmt('dp_r2','dt4','Ruko Sudirman',8000000,p1,fmt(new Date(y,m-1,1)),'paid','Sewa Unit Utama — PT. Maju Bersama');
+  addPmt('dp_r3','dt4','Ruko Sudirman',8000000,cur,fmt(new Date(y,m,1)),'paid','Sewa Unit Utama — PT. Maju Bersama');
+
+  // Pengeluaran
+  pmts.push({ id:'dp_e1', type:'expense', tenantId:'', propertyName:'Kos Melati', amount:750000, period:p1, dueDate:fmt(new Date(y,m-1,15)), status:'paid', description:'Perbaikan AC Kamar C', expenseCategory:'maintenance', expenseUnitId:'', createdAt:now.toISOString() });
+  pmts.push({ id:'dp_e2', type:'expense', tenantId:'', propertyName:'Ruko Sudirman', amount:1200000, period:cur, dueDate:fmt(new Date(y,m,10)), status:'paid', description:'Biaya kebersihan & keamanan', expenseCategory:'other', expenseUnitId:'', createdAt:now.toISOString() });
+
+  DB.set('payments', pmts);
+
+  dismissOnboarding();
+  refreshCurrentPage();
+  showToast('Data contoh dimuat! Jelajahi semua fitur.', 'success', 3500);
+}
+
 function showOnboarding() {
   if (DB.getVal('onboarded')) return;
   const overlay = document.createElement('div');
@@ -166,6 +235,7 @@ function showOnboarding() {
         <div class="onboarding-step"><div class="onboarding-step-num">3</div><div class="onboarding-step-text">Catat pembayaran & pantau cashflow</div></div>
       </div>
       <button class="onboarding-btn" onclick="dismissOnboarding()">Mulai Sekarang</button>
+      <button class="onboarding-btn-demo" onclick="loadDummyData()">Coba dengan Data Contoh</button>
       <button class="onboarding-skip" onclick="dismissOnboarding()">Lewati</button>
     </div>`;
   document.body.appendChild(overlay);
