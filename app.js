@@ -1397,7 +1397,7 @@ let reportTab = 'overview';
 
 function switchReportTab(tab, btn) {
   reportTab = tab;
-  document.querySelectorAll('#page-reports > .filter-tabs:first-child .filter-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#page-reports > .filter-tabs.ui-pro-only .filter-tab').forEach(t=>t.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.querySelectorAll('.rpt-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(`rpt-tab-${tab}`).classList.add('active');
@@ -1647,7 +1647,7 @@ function renderYield() {
     compHtml += '</tbody></table></div></div>';
   }
 
-  container.innerHTML = compHtml + cardsHtml;
+  container.innerHTML = explanationToggleBtn() + compHtml + cardsHtml;
 }
 
 // ===== PROYEKSI (apresiasi + horizon) =====
@@ -1809,7 +1809,7 @@ function renderProyeksi() {
     compHtml += '</tbody></table></div></div>';
   }
 
-  container.innerHTML = framingHtml + assumptionHtml + compHtml + cardsHtml;
+  container.innerHTML = explanationToggleBtn() + framingHtml + assumptionHtml + compHtml + cardsHtml;
 }
 
 // ===== OCCUPANCY ANALYTICS =====
@@ -3506,8 +3506,31 @@ function renderCharts() {
 }
 
 // ===== INIT =====
+function isExplanationsHidden() {
+  return DB.getVal('hide_explanations') === '1';
+}
+function applyExplanationPref() {
+  const rpt = document.getElementById('page-reports');
+  if (rpt) rpt.classList.toggle('hide-explanations', isExplanationsHidden());
+}
+function toggleExplanations() {
+  DB.setVal('hide_explanations', isExplanationsHidden() ? '0' : '1');
+  applyExplanationPref();
+  if (reportTab === 'yield') renderYield();
+  else if (reportTab === 'proyeksi') renderProyeksi();
+}
+function explanationToggleBtn() {
+  const hidden = isExplanationsHidden();
+  return `<div style="text-align:right;margin-bottom:8px">
+    <button class="btn-explain-toggle" onclick="toggleExplanations()">
+      ${hidden ? '💡 Tampilkan penjelasan' : '🙈 Sembunyikan penjelasan'}
+    </button>
+  </div>`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   applyUiMode();
+  applyExplanationPref();
   // Apply saved theme
   setTheme(getTheme());
 

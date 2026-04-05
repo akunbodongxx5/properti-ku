@@ -663,6 +663,23 @@ body {
 .yield-cap-table-note { font-size: 11px; color: var(--text-muted); margin: 0 0 8px; line-height: 1.4; }
 .yield-cap-table-note em { font-style: italic; color: var(--text-secondary); }
 
+/* Explanation toggle */
+.btn-explain-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.btn-explain-toggle:hover { border-color: var(--primary); color: var(--primary); }
+.hide-explanations .yield-cap-micro,
+.hide-explanations .yield-framing-card,
+.hide-explanations .yield-cap-table-note { display: none !important; }
+
 /* Simple vs Pro UI */
 [data-ui-mode="simple"] .ui-pro-only { display: none !important; }
 .reports-simple-tip {
