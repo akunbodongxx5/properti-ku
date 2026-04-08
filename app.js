@@ -350,9 +350,11 @@ function closeFabMenu() {
 // ===== Navigation =====
 let currentPage = 'dashboard';
 function navigateTo(page, btn) {
+  const pageEl = document.getElementById(`page-${page}`);
+  if (!pageEl) return;
   currentPage = page;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(`page-${page}`).classList.add('active');
+  pageEl.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const titles = {
@@ -362,7 +364,8 @@ function navigateTo(page, btn) {
     units: t('title.units'),
     reports: getUiMode() === 'simple' ? t('title.summary') : t('title.reports')
   };
-  document.getElementById('page-title').textContent = titles[page];
+  const pt = document.getElementById('page-title');
+  if (pt) pt.textContent = titles[page] != null ? titles[page] : page;
   closeFabMenu();
   refreshCurrentPage();
 }
@@ -1656,7 +1659,9 @@ function renderDashboard() {
   const overdue = payments.filter(p=>p.status==='overdue').length;
 
   const simple = isSimpleMode();
-  document.getElementById('greeting-container').innerHTML = `
+  const greet = document.getElementById('greeting-container');
+  if (!greet) return;
+  greet.innerHTML = `
     <div class="greeting-banner">
       <div class="greeting-text">${getGreeting()} 👋</div>
       <div class="greeting-name">${simple ? t('dash.welcome') : t('dash.investor')}</div>
@@ -1672,19 +1677,34 @@ function renderDashboard() {
   const cfTitle = document.getElementById('dash-cf-title');
   if (cfTitle) cfTitle.textContent = simple ? t('dash.cfSimple') : t('dash.cfPro');
 
-  document.getElementById('cf-income').textContent = formatRpFull(inc);
-  document.getElementById('cf-expense').textContent = formatRpFull(exp);
-  document.getElementById('cf-net').textContent = formatRpFull(inc - exp);
+  const cfIn = document.getElementById('cf-income');
+  const cfEx = document.getElementById('cf-expense');
+  const cfNt = document.getElementById('cf-net');
+  if (cfIn) cfIn.textContent = formatRpFull(inc);
+  if (cfEx) cfEx.textContent = formatRpFull(exp);
+  if (cfNt) cfNt.textContent = formatRpFull(inc - exp);
 
-  // Upcoming dues
-  const pending = payments.filter(p=>p.status==='pending'||p.status==='overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,5);
+  // Upcoming dues (sort by due date; missing dueDate last)
+  const pending = payments.filter(p => p.status === 'pending' || p.status === 'overdue')
+    .sort((a, b) => {
+      const aMs = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const bMs = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+      return aMs - bMs;
+    }).slice(0, 5);
   const dc = document.getElementById('upcoming-dues');
-  if (!pending.length) dc.innerHTML = '<p class="empty-state">' + t('dash.noDues') + '</p>';
-  else dc.innerHTML = pending.map(p => {
-    const tnt = tenants.find(x=>x.id===p.tenantId), d = daysUntil(p.dueDate);
-    const lbl = d<0 ? `<span class="overdue-tag">${t('dash.overdue', { n: Math.abs(d) })}</span>` : `<span class="upcoming-tag">${t('dash.inDays', { n: d })}</span>`;
-    return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(tnt?.name || t('dash.expenseLbl'))}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
-  }).join('');
+  if (dc) {
+    if (!pending.length) dc.innerHTML = '<p class="empty-state">' + t('dash.noDues') + '</p>';
+    else dc.innerHTML = pending.map(p => {
+      const tnt = tenants.find(x => x.id === p.tenantId);
+      const d = p.dueDate ? daysUntil(p.dueDate) : null;
+      const lbl = d == null || isNaN(d)
+        ? `<span class="upcoming-tag">—</span>`
+        : d < 0
+          ? `<span class="overdue-tag">${t('dash.overdue', { n: Math.abs(d) })}</span>`
+          : `<span class="upcoming-tag">${t('dash.inDays', { n: d })}</span>`;
+      return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(tnt?.name || t('dash.expenseLbl'))}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
+    }).join('');
+  }
 
   // ROI Cards (Pro saja)
   if (isProMode()) renderROICards();
@@ -1696,18 +1716,20 @@ function renderDashboard() {
   // Properties
   const props = [...new Set(units.map(u=>u.property))];
   const pc = document.getElementById('dashboard-properties');
-  if (!props.length) pc.innerHTML = '<p class="empty-state">' + t('dash.propertiesEmpty') + '</p>';
-  else pc.innerHTML = props.map(prop => {
-    const pu = units.filter(u=>u.property===prop), po = pu.filter(u=>u.status==='occupied').length, pt = pu.length;
-    const o = pt>0?Math.round((po/pt)*100):0, circ = 2*Math.PI*16, off = circ-(o/100)*circ;
-    const col = o>=80?'var(--success)':o>=50?'var(--warning-dark)':'var(--danger)';
-    return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${escapeHtml(prop)}</span>
-      <span class="property-mini-detail">${t('dash.occupiedDetail', { po, pt, rent: formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0)) })}</span></div>
-      <div class="occ-ring"><svg width="44" height="44" viewBox="0 0 44 44">
-        <circle cx="22" cy="22" r="16" fill="none" stroke="var(--border)" stroke-width="4"/>
-        <circle cx="22" cy="22" r="16" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${circ}" stroke-dashoffset="${off}" stroke-linecap="round"/>
-      </svg><span class="occ-ring-text" style="color:${col}">${o}%</span></div></div>`;
-  }).join('');
+  if (pc) {
+    if (!props.length) pc.innerHTML = '<p class="empty-state">' + t('dash.propertiesEmpty') + '</p>';
+    else pc.innerHTML = props.map(prop => {
+      const pu = units.filter(u=>u.property===prop), po = pu.filter(u=>u.status==='occupied').length, pt = pu.length;
+      const o = pt>0?Math.round((po/pt)*100):0, circ = 2*Math.PI*16, off = circ-(o/100)*circ;
+      const col = o>=80?'var(--success)':o>=50?'var(--warning-dark)':'var(--danger)';
+      return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${escapeHtml(prop)}</span>
+        <span class="property-mini-detail">${t('dash.occupiedDetail', { po, pt, rent: formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0)) })}</span></div>
+        <div class="occ-ring"><svg width="44" height="44" viewBox="0 0 44 44">
+          <circle cx="22" cy="22" r="16" fill="none" stroke="var(--border)" stroke-width="4"/>
+          <circle cx="22" cy="22" r="16" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${circ}" stroke-dashoffset="${off}" stroke-linecap="round"/>
+        </svg><span class="occ-ring-text" style="color:${col}">${o}%</span></div></div>`;
+    }).join('');
+  }
 
   const dbc = document.getElementById('dashboard-business-calendar');
   if (dbc) {
@@ -2514,7 +2536,11 @@ function calcKPR() {
     rentConservative: v('kpr-rent-low'), rentModerate: v('kpr-rent-mid'), rentOptimistic: v('kpr-rent-high')
   };
 
-  if (harga <= 0 || tenor <= 0) return;
+  const kprOut = document.getElementById('kpr-results');
+  if (harga <= 0 || tenor <= 0) {
+    if (kprOut) kprOut.innerHTML = '';
+    return;
+  }
 
   const dpAmount = harga * dpPct / 100;
   const loanAmount = harga - dpAmount;
@@ -2775,7 +2801,8 @@ function calcKPR() {
     freq: rentFreq,
     rent: formatRp(Math.round(sewaAwal * Math.pow(1 + rentMid/100, Math.floor(tenor/rentFreq))))
   }) : '';
-  document.getElementById('kpr-results').innerHTML = `
+  if (!kprOut) return;
+  kprOut.innerHTML = `
     <div class="card">
       <h3 class="card-title">${escapeHtml(t('kpr.resultsTitle'))}</h3>
 
@@ -3256,6 +3283,19 @@ async function sendTelegramReminder() {
 }
 
 // ===== SETTINGS =====
+/** Hapus semua data lokal (tombol Reset di pengaturan). Inline confirm() di HTML attribute rusak jika string berisi tanda kutip. */
+function resetAllData() {
+  const msg = typeof t === 'function' ? t('settings.resetConfirm') : 'Delete ALL data? This cannot be undone.';
+  if (!confirm(msg)) return;
+  try {
+    localStorage.clear();
+  } catch (e) {
+    alert((e && e.message) || String(e));
+    return;
+  }
+  location.reload();
+}
+
 function showSettings() {
   const cfg = getTelegramConfig();
   const isDark = getTheme() === 'dark';
@@ -3333,7 +3373,7 @@ function showSettings() {
 
     <div class="yield-divider" style="margin:16px 0"></div>
     <div class="btn-group">
-      <button class="btn btn-danger" onclick="if(confirm(${JSON.stringify(t('settings.resetConfirm'))})) { localStorage.clear(); location.reload(); }">${t('settings.reset')}</button>
+      <button type="button" class="btn btn-danger" onclick="resetAllData()">${t('settings.reset')}</button>
     </div>
   `);
 }
@@ -3900,8 +3940,9 @@ function nextAnnualOccurrenceDate(month1to12, dayOfMonth) {
 function collectBusinessReminders(contractDays = 60, permitDays = 90) {
   const out = [];
   getTenants().forEach(tenant => {
+    if (!tenant.endDate) return;
     const dl = daysUntil(tenant.endDate);
-    if (dl >= 0 && dl <= contractDays) {
+    if (!isNaN(dl) && dl >= 0 && dl <= contractDays) {
       out.push({
         level: dl <= 14 ? 'urgent' : 'soon',
         title: t('rem.contract', { name: tenant.name }),
