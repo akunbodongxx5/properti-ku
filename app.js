@@ -20,7 +20,7 @@ function isSimpleMode() { return getUiMode() === 'simple'; }
 function applyUiMode() {
   document.body.dataset.uiMode = getUiMode();
   const navLbl = document.getElementById('nav-reports-label');
-  if (navLbl) navLbl.textContent = getUiMode() === 'simple' ? 'Ringkasan' : 'Laporan';
+  if (navLbl && typeof t === 'function') navLbl.textContent = getUiMode() === 'simple' ? t('nav.summary') : t('nav.reports');
 }
 function setUiModeFromSettings(mode) {
   if (mode !== 'simple' && mode !== 'pro') return;
@@ -32,11 +32,11 @@ function setUiModeFromSettings(mode) {
   if (ov) ov.classList.add('active');
   refreshCurrentPage();
   const titleMap = {
-    dashboard: 'PropertiKu',
-    tenants: 'Penyewa',
-    payments: 'Pembayaran',
-    units: 'Unit & Properti',
-    reports: getUiMode() === 'simple' ? 'Ringkasan' : 'Laporan'
+    dashboard: t('title.app'),
+    tenants: t('title.tenants'),
+    payments: t('title.payments'),
+    units: t('title.units'),
+    reports: getUiMode() === 'simple' ? t('title.summary') : t('title.reports')
   };
   const pt = document.getElementById('page-title');
   if (pt && titleMap[currentPage]) pt.textContent = titleMap[currentPage];
@@ -45,14 +45,37 @@ function setUiModeFromSettings(mode) {
 }
 
 // ===== Helpers =====
+function numLocaleTag() {
+  return (typeof getLocale === 'function' && getLocale() === 'en') ? 'en-GB' : 'id-ID';
+}
 function formatRp(n) {
   const v = Number(n);
-  if (v >= 1000000000) return 'Rp ' + (v / 1000000000).toFixed(1).replace('.0', '') + ' M';
-  if (v >= 1000000) return 'Rp ' + (v / 1000000).toFixed(1).replace('.0', '') + ' jt';
-  if (v >= 1000) return 'Rp ' + (v / 1000).toFixed(0) + ' rb';
-  return 'Rp ' + v.toLocaleString('id-ID');
+  const loc = numLocaleTag();
+  const en = typeof getLocale === 'function' && getLocale() === 'en';
+  if (v >= 1000000000) return 'Rp ' + (v / 1000000000).toFixed(1).replace('.0', '') + (en ? ' B' : ' M');
+  if (v >= 1000000) return 'Rp ' + (v / 1000000).toFixed(1).replace('.0', '') + (en ? ' M' : ' jt');
+  if (v >= 1000) return 'Rp ' + (v / 1000).toFixed(0) + (en ? ' k' : ' rb');
+  return 'Rp ' + v.toLocaleString(loc);
 }
-function formatRpFull(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+
+function formatPaybackLabel(paybackYearsStr) {
+  if (paybackYearsStr === '-') return '-';
+  const y = Number(paybackYearsStr);
+  if (y >= 2) return t('rpt.paybackYears', { n: paybackYearsStr });
+  return t('rpt.paybackMonths', { n: String(Math.round(y * 12)) });
+}
+
+function formatSisaTenorMonths(sisaTenor) {
+  if (!sisaTenor || sisaTenor <= 0) return '';
+  if (sisaTenor > 12) {
+    const y = Math.floor(sisaTenor / 12);
+    const m = sisaTenor % 12;
+    if (m) return t('rpt.tenorYrMo', { y, m });
+    return t('rpt.paybackYears', { n: String(y) });
+  }
+  return t('rpt.tenorMonthsOnly', { n: String(sisaTenor) });
+}
+function formatRpFull(n) { return 'Rp ' + Number(n).toLocaleString(numLocaleTag()); }
 
 // Number input formatting with thousand separator (dot)
 function formatNumDots(n) {
@@ -84,11 +107,64 @@ function getRpVal(name) {
   const el = document.querySelector(`[name="${name}"]`) || document.getElementById(name);
   return el ? parseNum(el.value) : 0;
 }
-function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function dateLocaleTag() {
+  return (typeof getLocale === 'function' && getLocale() === 'en') ? 'en-GB' : 'id-ID';
+}
+function formatDate(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString(dateLocaleTag(), { day: 'numeric', month: 'short', year: 'numeric' });
+}
 function getMonthYear(d) { const x = d ? new Date(d) : new Date(); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`; }
 function getYear(d) { return d ? new Date(d).getFullYear().toString() : new Date().getFullYear().toString(); }
 function daysUntil(d) { const now = new Date(); now.setHours(0,0,0,0); const t = new Date(d); t.setHours(0,0,0,0); return Math.ceil((t-now)/(864e5)); }
-function getGreeting() { const h = new Date().getHours(); if (h<11) return 'Selamat Pagi'; if (h<15) return 'Selamat Siang'; if (h<18) return 'Selamat Sore'; return 'Selamat Malam'; }
+function parseYMD(s) {
+  if (!s) return null;
+  const p = String(s).slice(0, 10).split('-');
+  if (p.length < 3) return null;
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  return isNaN(d.getTime()) ? null : d;
+}
+/** Sewa aktif pada bulan kalender ym (YYYY-MM) memakai kontrak penyewa + arsip */
+function leaseCoversMonth(startStr, endStr, ym) {
+  const [Y, M] = ym.split('-').map(Number);
+  if (!Y || !M) return false;
+  const ms = new Date(Y, M - 1, 1);
+  const me = new Date(Y, M, 0);
+  const as = parseYMD(startStr), ae = parseYMD(endStr);
+  if (!as || !ae) return false;
+  return as <= me && ae >= ms;
+}
+function occupiedUnitsByLeasesAtMonth(units, tenants, history, ym) {
+  let n = 0;
+  for (const u of units) {
+    let ok = false;
+    for (const t of tenants) {
+      if (t.unitId !== u.id) continue;
+      if (leaseCoversMonth(t.startDate, t.endDate, ym)) { ok = true; break; }
+    }
+    if (!ok) {
+      for (const h of history) {
+        if (h.unitId !== u.id) continue;
+        if (leaseCoversMonth(h.startDate, h.endDate, ym)) { ok = true; break; }
+      }
+    }
+    if (ok) n++;
+  }
+  return n;
+}
+function getGreeting() {
+  const h = new Date().getHours();
+  if (typeof t !== 'function') {
+    if (h < 11) return 'Selamat Pagi';
+    if (h < 15) return 'Selamat Siang';
+    if (h < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
+  }
+  if (h < 11) return t('greeting.morning');
+  if (h < 15) return t('greeting.noon');
+  if (h < 18) return t('greeting.afternoon');
+  return t('greeting.evening');
+}
 function naturalSort(a, b) {
   const ax = [], bx = [];
   a.replace(/(\d+)|(\D+)/g, (_, $1, $2) => { ax.push([$1 || Infinity, $2 || '']); });
@@ -139,31 +215,31 @@ function emptyStateHTML(type) {
   const states = {
     unit: {
       svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="12" y="28" width="56" height="40" rx="4" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M12 36h56" stroke="var(--text-muted)" stroke-width="2"/><rect x="24" y="44" width="12" height="16" rx="2" stroke="var(--text-muted)" stroke-width="2"/><rect x="44" y="44" width="12" height="8" rx="2" stroke="var(--text-muted)" stroke-width="2"/><path d="M40 12L8 28h64L40 12z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
-      title: 'Belum Ada Unit',
-      desc: 'Mulai tambah unit properti kamu — kos, apartemen, rumah, atau ruko.',
-      action: `<button class="btn btn-primary" onclick="showUnitForm(); closeFabMenu()">+ Tambah Unit Pertama</button><button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">📦 Coba Data Contoh</button>`
+      titleKey: 'empty.unitTitle',
+      descKey: 'empty.unitDesc',
+      action: () => `<button class="btn btn-primary" onclick="showUnitForm(); closeFabMenu()">${t('empty.unitBtn')}</button><button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">${t('empty.demo')}</button>`
     },
     tenant: {
       svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><circle cx="40" cy="28" r="14" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M16 68c0-13.255 10.745-24 24-24s24 10.745 24 24" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
-      title: 'Belum Ada Penyewa',
-      desc: 'Tambahkan penyewa dan hubungkan ke unit yang tersedia.',
-      action: `<button class="btn btn-primary" onclick="showTenantForm(); closeFabMenu()">+ Tambah Penyewa</button>`
+      titleKey: 'empty.tenantTitle',
+      descKey: 'empty.tenantDesc',
+      action: () => `<button class="btn btn-primary" onclick="showTenantForm(); closeFabMenu()">${t('empty.tenantBtn')}</button>`
     },
     payment: {
       svg: `<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="10" y="22" width="60" height="36" rx="6" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M10 34h60" stroke="var(--text-muted)" stroke-width="2"/><circle cx="56" cy="46" r="5" stroke="var(--text-muted)" stroke-width="2"/><circle cx="46" cy="46" r="5" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
-      title: 'Belum Ada Pembayaran',
-      desc: 'Catat pemasukan sewa atau pengeluaran properti kamu.',
-      action: `<button class="btn btn-primary" onclick="showPaymentForm(); closeFabMenu()">+ Catat Pembayaran</button>`
+      titleKey: 'empty.payTitle',
+      descKey: 'empty.payDesc',
+      action: () => `<button class="btn btn-primary" onclick="showPaymentForm(); closeFabMenu()">${t('empty.payBtn')}</button>`
     },
     property: {
       svg: `<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="8" y="24" width="48" height="32" rx="3" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/><path d="M32 8L4 24h56L32 8z" stroke="var(--text-muted)" stroke-width="2" fill="var(--primary-glow)"/></svg>`,
-      title: 'Belum Ada Properti',
-      desc: 'Tambahkan properti pertama kamu untuk mulai.',
-      action: `<button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">📦 Coba Data Contoh</button>`
+      titleKey: 'empty.propTitle',
+      descKey: 'empty.propDesc',
+      action: () => `<button class="btn btn-outline empty-demo-btn" onclick="loadDummyData()">${t('empty.demo')}</button>`
     }
   };
   const s = states[type] || states.property;
-  return `<div class="empty-state-fancy">${s.svg}<div class="empty-title">${s.title}</div><div class="empty-desc">${s.desc}</div>${s.action}</div>`;
+  return `<div class="empty-state-fancy">${s.svg}<div class="empty-title">${t(s.titleKey)}</div><div class="empty-desc">${t(s.descKey)}</div>${s.action()}</div>`;
 }
 
 // ===== Onboarding =====
@@ -233,7 +309,7 @@ function loadDummyData() {
 
   dismissOnboarding();
   refreshCurrentPage();
-  showToast('Data contoh dimuat! Jelajahi semua fitur.', 'success', 3500);
+  showToast(t('toast.demo'), 'success', 3500);
 }
 
 function showOnboarding() {
@@ -244,16 +320,16 @@ function showOnboarding() {
   overlay.innerHTML = `
     <div class="onboarding-content">
       <div class="onboarding-icon">🏠</div>
-      <div class="onboarding-title">Selamat Datang di PropertiKu!</div>
-      <div class="onboarding-desc">Kelola properti sewamu dengan mudah — dari kos-kosan sampai apartemen.</div>
+      <div class="onboarding-title">${t('onboard.title')}</div>
+      <div class="onboarding-desc">${t('onboard.desc')}</div>
       <div class="onboarding-steps">
-        <div class="onboarding-step"><div class="onboarding-step-num">1</div><div class="onboarding-step-text">Tambah properti & unit kamu</div></div>
-        <div class="onboarding-step"><div class="onboarding-step-num">2</div><div class="onboarding-step-text">Daftarkan penyewa di setiap unit</div></div>
-        <div class="onboarding-step"><div class="onboarding-step-num">3</div><div class="onboarding-step-text">Catat pembayaran & pantau cashflow</div></div>
+        <div class="onboarding-step"><div class="onboarding-step-num">1</div><div class="onboarding-step-text">${t('onboard.s1')}</div></div>
+        <div class="onboarding-step"><div class="onboarding-step-num">2</div><div class="onboarding-step-text">${t('onboard.s2')}</div></div>
+        <div class="onboarding-step"><div class="onboarding-step-num">3</div><div class="onboarding-step-text">${t('onboard.s3')}</div></div>
       </div>
-      <button class="onboarding-btn" onclick="dismissOnboarding()">Mulai Sekarang</button>
-      <button class="onboarding-btn-demo" onclick="loadDummyData()">Coba dengan Data Contoh</button>
-      <button class="onboarding-skip" onclick="dismissOnboarding()">Lewati</button>
+      <button class="onboarding-btn" onclick="dismissOnboarding()">${t('onboard.start')}</button>
+      <button class="onboarding-btn-demo" onclick="loadDummyData()">${t('onboard.demo')}</button>
+      <button class="onboarding-skip" onclick="dismissOnboarding()">${t('onboard.skip')}</button>
     </div>`;
   document.body.appendChild(overlay);
 }
@@ -280,16 +356,31 @@ function navigateTo(page, btn) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const titles = {
-    dashboard: 'PropertiKu',
-    tenants: 'Penyewa',
-    payments: 'Pembayaran',
-    units: 'Unit & Properti',
-    reports: getUiMode() === 'simple' ? 'Ringkasan' : 'Laporan'
+    dashboard: t('title.app'),
+    tenants: t('title.tenants'),
+    payments: t('title.payments'),
+    units: t('title.units'),
+    reports: getUiMode() === 'simple' ? t('title.summary') : t('title.reports')
   };
   document.getElementById('page-title').textContent = titles[page];
   closeFabMenu();
   refreshCurrentPage();
 }
+function syncPageTitle() {
+  if (typeof t !== 'function') return;
+  const titles = {
+    dashboard: t('title.app'),
+    tenants: t('title.tenants'),
+    payments: t('title.payments'),
+    units: t('title.units'),
+    reports: getUiMode() === 'simple' ? t('title.summary') : t('title.reports')
+  };
+  const pt = document.getElementById('page-title');
+  if (pt && titles[currentPage]) pt.textContent = titles[currentPage];
+  const themeBtn = document.getElementById('theme-toggle-btn');
+  if (themeBtn) themeBtn.title = t('theme.toggle');
+}
+if (typeof window !== 'undefined') window.syncPageTitle = syncPageTitle;
 function refreshCurrentPage() {
   if (currentPage === 'dashboard') renderDashboard();
   else if (currentPage === 'tenants') renderTenants();
@@ -384,46 +475,46 @@ function saveSubtypeTemplate(property, subtype, facilities, price) {
 
 // ===== FACILITY OPTIONS =====
 const FACILITY_OPTIONS = [
-  { cat: 'Ruangan', items: [
-    { id: 'ac', icon: '❄️', label: 'AC' },
-    { id: 'full_furnished', icon: '🪑', label: 'Full Furnished' },
-    { id: 'semi_furnished', icon: '🪑', label: 'Semi Furnished' },
-    { id: 'no_furnished', icon: '📦', label: 'No Furnished' },
-    { id: 'tv', icon: '📺', label: 'TV' },
-    { id: 'kulkas', icon: '🧊', label: 'Kulkas' },
-    { id: 'dapur_bersama', icon: '🍳', label: 'Dapur Bersama' },
-    { id: 'dapur_pribadi', icon: '🍳', label: 'Dapur Pribadi' },
+  { catKey: 'faccat.room', items: [
+    { id: 'ac', icon: '❄️', key: 'fac.ac' },
+    { id: 'full_furnished', icon: '🪑', key: 'fac.full_furnished' },
+    { id: 'semi_furnished', icon: '🪑', key: 'fac.semi_furnished' },
+    { id: 'no_furnished', icon: '📦', key: 'fac.no_furnished' },
+    { id: 'tv', icon: '📺', key: 'fac.tv' },
+    { id: 'kulkas', icon: '🧊', key: 'fac.kulkas' },
+    { id: 'dapur_bersama', icon: '🍳', key: 'fac.dapur_bersama' },
+    { id: 'dapur_pribadi', icon: '🍳', key: 'fac.dapur_pribadi' },
   ]},
-  { cat: 'Kamar Mandi', items: [
-    { id: 'km_dalam', icon: '🚿', label: 'KM Dalam' },
-    { id: 'km_luar', icon: '🚿', label: 'KM Luar' },
+  { catKey: 'faccat.bathroom', items: [
+    { id: 'km_dalam', icon: '🚿', key: 'fac.km_dalam' },
+    { id: 'km_luar', icon: '🚿', key: 'fac.km_luar' },
   ]},
-  { cat: 'Utilitas', items: [
-    { id: 'wifi', icon: '📶', label: 'Wi-Fi' },
-    { id: 'listrik_incl', icon: '⚡', label: 'Listrik Termasuk' },
-    { id: 'air_incl', icon: '💧', label: 'Air Termasuk' },
-    { id: 'parkir_motor', icon: '🅿️', label: 'Parkir Motor' },
-    { id: 'parkir_mobil', icon: '🚗', label: 'Parkir Mobil' },
-    { id: 'akses_kunci', icon: '🔒', label: 'Akses Kartu/Kunci Digital' },
+  { catKey: 'faccat.utility', items: [
+    { id: 'wifi', icon: '📶', key: 'fac.wifi' },
+    { id: 'listrik_incl', icon: '⚡', key: 'fac.listrik_incl' },
+    { id: 'air_incl', icon: '💧', key: 'fac.air_incl' },
+    { id: 'parkir_motor', icon: '🅿️', key: 'fac.parkir_motor' },
+    { id: 'parkir_mobil', icon: '🚗', key: 'fac.parkir_mobil' },
+    { id: 'akses_kunci', icon: '🔒', key: 'fac.akses_kunci' },
   ]},
-  { cat: 'Layanan', items: [
-    { id: 'laundry', icon: '👕', label: 'Laundry' },
-    { id: 'air_minum', icon: '🥤', label: 'Air Minum' },
-    { id: 'nasi_putih', icon: '🍚', label: 'Nasi Putih' },
-    { id: 'cleaning', icon: '🧹', label: 'Cleaning Service' },
-    { id: 'security', icon: '👮', label: 'Security 24 Jam' },
+  { catKey: 'faccat.service', items: [
+    { id: 'laundry', icon: '👕', key: 'fac.laundry' },
+    { id: 'air_minum', icon: '🥤', key: 'fac.air_minum' },
+    { id: 'nasi_putih', icon: '🍚', key: 'fac.nasi_putih' },
+    { id: 'cleaning', icon: '🧹', key: 'fac.cleaning' },
+    { id: 'security', icon: '👮', key: 'fac.security' },
   ]},
-  { cat: 'Fasilitas Gedung', items: [
-    { id: 'kolam_renang', icon: '🏊', label: 'Kolam Renang' },
-    { id: 'gym', icon: '🏋️', label: 'Gym / Fitness' },
-    { id: 'lift', icon: '🛗', label: 'Lift' },
-    { id: 'ruang_meeting', icon: '📦', label: 'Ruang Meeting' },
+  { catKey: 'faccat.building', items: [
+    { id: 'kolam_renang', icon: '🏊', key: 'fac.kolam_renang' },
+    { id: 'gym', icon: '🏋️', key: 'fac.gym' },
+    { id: 'lift', icon: '🛗', key: 'fac.lift' },
+    { id: 'ruang_meeting', icon: '📦', key: 'fac.ruang_meeting' },
   ]},
-  { cat: 'Aturan', items: [
-    { id: 'pet_friendly', icon: '🐾', label: 'Pet Friendly' },
-    { id: 'bebas_rokok', icon: '🚭', label: 'Bebas Rokok' },
-    { id: 'boleh_tamu', icon: '👫', label: 'Boleh Bawa Tamu' },
-    { id: 'no_tamu', icon: '🚫', label: 'Tidak Boleh Tamu' },
+  { catKey: 'faccat.rules', items: [
+    { id: 'pet_friendly', icon: '🐾', key: 'fac.pet_friendly' },
+    { id: 'bebas_rokok', icon: '🚭', key: 'fac.bebas_rokok' },
+    { id: 'boleh_tamu', icon: '👫', key: 'fac.boleh_tamu' },
+    { id: 'no_tamu', icon: '🚫', key: 'fac.no_tamu' },
   ]},
 ];
 
@@ -442,6 +533,11 @@ const EXPENSE_CATEGORIES = [
 
 function getExpenseCategoryLabel(id) {
   const cat = EXPENSE_CATEGORIES.find(c => c.id === id);
+  const key = 'expense.' + (id || 'other');
+  if (typeof t === 'function') {
+    const label = t(key);
+    if (label !== key) return (cat ? cat.icon : '\u{1F4E6}') + ' ' + label;
+  }
   return cat ? cat.icon + ' ' + cat.label : '\u{1F4E6} Lain-lain';
 }
 
@@ -452,6 +548,8 @@ function saveTenantHistory(h) { DB.set('tenantHistory', h); }
 // ===== UNIT PHOTOS =====
 function getUnitPhotos() { return DB.get('unitPhotos'); }
 function saveUnitPhotos(p) { DB.set('unitPhotos', p); }
+function getMaintenanceTickets() { return DB.get('maintenanceTickets'); }
+function saveMaintenanceTickets(t) { DB.set('maintenanceTickets', t); }
 
 // ===== THEME =====
 function getTheme() { return DB.getVal('theme') || 'light'; }
@@ -482,7 +580,7 @@ function toggleChip(id) {
 function getFacilityLabel(id) {
   for (const cat of FACILITY_OPTIONS) {
     const item = cat.items.find(x => x.id === id);
-    if (item) return item.label;
+    if (item) return t(item.key);
   }
   return id;
 }
@@ -490,10 +588,10 @@ function getFacilityLabel(id) {
 function buildChipsHtml(selected) {
   let html = '<div class="chips-group">';
   FACILITY_OPTIONS.forEach(cat => {
-    html += `<div class="chips-category">${cat.cat}</div>`;
+    html += `<div class="chips-category">${t(cat.catKey)}</div>`;
     cat.items.forEach(item => {
       const sel = selected.includes(item.id) ? 'selected' : '';
-      html += `<div class="chip ${sel}" data-id="${item.id}" onclick="toggleChip('${item.id}')"><span class="chip-icon">${item.icon}</span> ${item.label}</div>`;
+      html += `<div class="chip ${sel}" data-id="${item.id}" onclick="toggleChip('${item.id}')"><span class="chip-icon">${item.icon}</span> ${t(item.key)}</div>`;
     });
   });
   html += '</div>';
@@ -520,7 +618,7 @@ function terbilang(n) {
 // ===== SVG CHART HELPERS =====
 function svgLineChart(data, options) {
   const { width = 300, height = 180, color = 'var(--primary)', label = '' } = options || {};
-  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  if (!data || data.length === 0) return '<div class="empty-state">' + t('chart.noData') + '</div>';
   const padL = 50, padR = 20, padT = 20, padB = 40;
   const w = width - padL - padR, h = height - padT - padB;
   const maxVal = Math.max(...data.map(d => d.value), 1);
@@ -554,9 +652,9 @@ function svgLineChart(data, options) {
 
 function svgDonutChart(data, options) {
   const { size = 200 } = options || {};
-  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  if (!data || data.length === 0) return '<div class="empty-state">' + t('chart.noData') + '</div>';
   const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return '<div class="empty-state">Belum ada data</div>';
+  if (total === 0) return '<div class="empty-state">' + t('chart.noData') + '</div>';
   const colors = ['#0d9488', '#6366f1', '#d97706', '#e11d48', '#7c3aed', '#059669', '#2563eb', '#c026d3', '#ca8a04'];
   const cx = size / 2, cy = size / 2, r = size * 0.35;
   const circumference = 2 * Math.PI * r;
@@ -584,7 +682,7 @@ function svgDonutChart(data, options) {
 
 function svgBarChart(data, options) {
   const { width = 300, height = 200, colors = ['var(--success)', 'var(--danger)'], labels = ['Income', 'Expense'] } = options || {};
-  if (!data || data.length === 0) return '<div class="empty-state">Belum ada data</div>';
+  if (!data || data.length === 0) return '<div class="empty-state">' + t('chart.noData') + '</div>';
   const padL = 50, padR = 20, padT = 20, padB = 50;
   const w = width - padL - padR, h = height - padT - padB;
   const maxVal = Math.max(...data.flatMap(d => d.values), 1);
@@ -709,7 +807,7 @@ function updateSubtypeOptions(property) {
   if (!sel) return;
   const currentVal = sel.value;
   // Keep first 2 options (Pilih/Tambah baru), rebuild the rest
-  sel.innerHTML = '<option value="">Tanpa blok/sub-tipe</option><option value="__new__">+ Tambah baru...</option>'
+  sel.innerHTML = '<option value="">' + t('form.subtypeNone') + '</option><option value="__new__">' + t('form.addNew') + '</option>'
     + subtypes.map(s => `<option value="${s}" ${s===currentVal?'selected':''}>${s}</option>`).join('');
 }
 
@@ -768,9 +866,9 @@ function buildUnitPhotoSection(unitId) {
       + '</div>';
   }).join('');
   const addBtn = photos.length < 5
-    ? '<button type="button" class="btn btn-outline" onclick="addUnitPhoto(\'' + unitId + '\')" style="font-size:13px">📷 Tambah Foto</button>'
-    : '<small style="color:var(--text-muted)">Maksimal 5 foto tercapai</small>';
-  return '<div class="form-group"><label class="form-label">📷 Foto Unit (maks 5)</label>'
+    ? '<button type="button" class="btn btn-outline" onclick="addUnitPhoto(\'' + unitId + '\')" style="font-size:13px">' + t('form.addPhoto') + '</button>'
+    : '<small style="color:var(--text-muted)">' + t('form.maxPhotos') + '</small>';
+  return '<div class="form-group"><label class="form-label">' + t('form.photoUnit') + '</label>'
     + '<div id="unit-photo-thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' + thumbs + '</div>'
     + addBtn + '</div>';
 }
@@ -785,69 +883,70 @@ function showUnitForm(editId) {
   const isExistingProp = u && existingProps.includes(u.property);
   const existingSubtypes = u ? [...new Set(units.filter(x => x.property === u.property && x.subtype).map(x => x.subtype))] : [];
 
-  openModal(u ? 'Edit Unit' : 'Tambah Unit Baru', `
+  const _rentPeriod = u?.billingCycle === 'yearly' ? t('form.periodYear') : t('form.periodMonth');
+  openModal(u ? t('unit.editTitle') : t('unit.addNewTitle'), `
     <form onsubmit="saveUnit(event,'${editId||''}')">
-      <div class="form-group"><label class="form-label">Nama Properti</label>
+      <div class="form-group"><label class="form-label">${t('form.propName')}</label>
         <select class="form-select" name="propertySelect" onchange="onPropertySelect(this.value)">
-          ${existingProps.length ? '' : '<option value="">Belum ada properti</option>'}
+          ${existingProps.length ? '' : '<option value="">' + t('form.noPropYet') + '</option>'}
           ${existingProps.map(p => `<option value="${p}" ${u?.property===p?'selected':''}>${p}</option>`).join('')}
-          <option value="__new__" ${!isExistingProp && !editId ? 'selected' : ''}>+ Tambah properti baru...</option>
+          <option value="__new__" ${!isExistingProp && !editId ? 'selected' : ''}>${t('form.addPropNew')}</option>
         </select>
-        <input class="form-input" id="new-property-input" name="newProperty" placeholder="Nama properti baru..." style="margin-top:8px;display:${(!isExistingProp || !existingProps.length) ? 'block' : 'none'}" value="${(!isExistingProp && u?.property) ? u.property : ''}">
+        <input class="form-input" id="new-property-input" name="newProperty" placeholder="${t('form.propNewPh')}" style="margin-top:8px;display:${(!isExistingProp || !existingProps.length) ? 'block' : 'none'}" value="${(!isExistingProp && u?.property) ? u.property : ''}">
       </div>
-      <div class="form-group"><label class="form-label">Blok / Sub-tipe</label>
+      <div class="form-group"><label class="form-label">${t('form.subtype')}</label>
         <select class="form-select" id="subtype-select" name="subtypeSelect" onchange="onSubtypeSelect(this.value)">
-          <option value="">Tanpa blok/sub-tipe</option>
-          <option value="__new__">+ Tambah baru...</option>
+          <option value="">${t('form.subtypeNone')}</option>
+          <option value="__new__">${t('form.addNew')}</option>
           ${existingSubtypes.map(s => `<option value="${s}" ${u?.subtype===s?'selected':''}>${s}</option>`).join('')}
         </select>
-        <input class="form-input" id="new-subtype-input" name="newSubtype" placeholder="Contoh: Blok A, Tipe Deluxe..." style="margin-top:8px;display:none" value="">
+        <input class="form-input" id="new-subtype-input" name="newSubtype" placeholder="${t('form.subtypePh')}" style="margin-top:8px;display:none" value="">
       </div>
-      <div class="form-group"><label class="form-label">Nomor / Nama Unit</label>
-        <input class="form-input" name="name" required placeholder="Kamar 101" value="${u?.name||''}"></div>
-      <div class="form-group"><label class="form-label">Tipe Properti</label>
+      <div class="form-group"><label class="form-label">${t('form.unitName')}</label>
+        <input class="form-input" name="name" required placeholder="${t('form.unitNamePh')}" value="${u?.name||''}"></div>
+      <div class="form-group"><label class="form-label">${t('form.propType')}</label>
         <select class="form-select" name="type">
-          <option value="kos" ${u?.type==='kos'?'selected':''}>Kos-kosan</option>
-          <option value="apartemen" ${u?.type==='apartemen'?'selected':''}>Apartemen</option>
-          <option value="rumah" ${u?.type==='rumah'?'selected':''}>Rumah</option>
-          <option value="ruko" ${u?.type==='ruko'?'selected':''}>Ruko</option>
-          <option value="kantor" ${u?.type==='kantor'?'selected':''}>Gedung Perkantoran</option>
+          <option value="kos" ${u?.type==='kos'?'selected':''}>${t('form.type.kos')}</option>
+          <option value="apartemen" ${u?.type==='apartemen'?'selected':''}>${t('form.type.apartemen')}</option>
+          <option value="rumah" ${u?.type==='rumah'?'selected':''}>${t('form.type.rumah')}</option>
+          <option value="ruko" ${u?.type==='ruko'?'selected':''}>${t('form.type.ruko')}</option>
+          <option value="kantor" ${u?.type==='kantor'?'selected':''}>${t('form.type.kantor')}</option>
         </select></div>
-      <div class="form-group"><label class="form-label">Siklus Pembayaran</label>
+      <div class="form-group"><label class="form-label">${t('form.billingCycle')}</label>
         <select class="form-select" name="billingCycle">
-          <option value="monthly" ${u?.billingCycle==='yearly'?'':'selected'}>Per Bulan</option>
-          <option value="yearly" ${u?.billingCycle==='yearly'?'selected':''}>Per Tahun</option>
+          <option value="monthly" ${u?.billingCycle==='yearly'?'':'selected'}>${t('form.perMonth')}</option>
+          <option value="yearly" ${u?.billingCycle==='yearly'?'selected':''}>${t('form.perYear')}</option>
         </select></div>
-      <div class="form-group"><label class="form-label" id="price-label">Harga Sewa / ${u?.billingCycle==='yearly'?'Tahun':'Bulan'} (Rp)</label>
+      <div class="form-group"><label class="form-label" id="price-label">${t('form.rentPrice', { period: _rentPeriod })}</label>
         <input class="form-input" name="price" type="text" inputmode="numeric" data-rp required placeholder="1.500.000" value="${u?.price ? formatNumDots(u.price) : ''}"></div>
       <div class="form-group" id="unit-costs-section">
-        <label class="form-label" style="margin-bottom:4px">💸 Biaya Tetap per Unit</label>
-        <small style="color:var(--text-muted);display:block;margin-bottom:10px">Untuk apartemen: IPL, sinking fund, dll. Kos-kosan bisa dikosongi (pakai biaya properti).</small>
+        <label class="form-label" style="margin-bottom:4px">${t('form.fixedCosts')}</label>
+        <small style="color:var(--text-muted);display:block;margin-bottom:10px">${t('form.fixedCostsHint')}</small>
         <div style="display:flex;gap:8px;margin-bottom:8px">
-          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">IPL / Service Charge (Rp/bln)</label>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.ipl')}</label>
             <input class="form-input" name="ipl" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.ipl ? formatNumDots(u.ipl) : ''}"></div>
-          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Sinking Fund (Rp/bln)</label>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.sinking')}</label>
             <input class="form-input" name="sinkingFund" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.sinkingFund ? formatNumDots(u.sinkingFund) : ''}"></div>
         </div>
         <div style="display:flex;gap:8px">
-          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">PBB Unit (Rp/thn)</label>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.unitPbb')}</label>
             <input class="form-input" name="unitPbb" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.unitPbb ? formatNumDots(u.unitPbb) : ''}"></div>
-          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">Biaya Lain (Rp/bln)</label>
+          <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.unitOther')}</label>
             <input class="form-input" name="unitOtherCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.unitOtherCost ? formatNumDots(u.unitOtherCost) : ''}"></div>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Fasilitas</label>
+      <div class="form-group"><label class="form-label">${t('form.facilities')}</label>
         ${buildChipsHtml(_selectedFacilities)}</div>
-      <div class="form-group"><label class="form-label">Status</label>
+      <div class="form-group"><label class="form-label">${t('form.status')}</label>
         <select class="form-select" name="status">
-          <option value="vacant" ${u?.status==='vacant'?'selected':''}>Kosong</option>
-          <option value="occupied" ${u?.status==='occupied'?'selected':''}>Terisi</option>
+          <option value="vacant" ${u?.status==='vacant'?'selected':''}>${t('form.vacant')}</option>
+          <option value="occupied" ${u?.status==='occupied'?'selected':''}>${t('form.occupied')}</option>
         </select></div>
       ${u ? buildUnitPhotoSection(editId) : ''}
-      <button type="submit" class="btn btn-primary">${u?'Simpan':'Tambah Unit'}</button>
-      ${u?`<div class="btn-group"><button type="button" class="btn btn-danger" onclick="deleteUnit('${editId}')">Hapus</button></div>`:''}
+      <button type="submit" class="btn btn-primary">${u ? t('form.save') : t('form.addUnit')}</button>
+      ${u?`<div class="btn-group"><button type="button" class="btn btn-danger" onclick="deleteUnit('${editId}')">${t('form.delete')}</button></div>`:''}
     </form>
-    <script>document.querySelector('[name="billingCycle"]').addEventListener('change',function(){document.getElementById('price-label').textContent='Harga Sewa / '+(this.value==='yearly'?'Tahun':'Bulan')+' (Rp)'})<\/script>
+    <script>document.querySelector('[name="billingCycle"]').addEventListener('change',function(){var y=this.value==='yearly';document.getElementById('price-label').textContent=typeof t==='function'?t('form.rentPrice',{period:y?t('form.periodYear'):t('form.periodMonth')}):('Harga Sewa / '+(y?'Tahun':'Bulan')+' (Rp)')})<\/script>
   `);
   setTimeout(() => initRpInputs(), 50);
 }
@@ -858,7 +957,7 @@ function saveUnit(e, editId) {
   // Resolve property name
   const propSelect = f.propertySelect.value;
   const property = (propSelect === '__new__' || propSelect === '') ? f.newProperty.value.trim() : propSelect;
-  if (!property) { alert('Nama properti wajib diisi'); return; }
+  if (!property) { alert(t('msg.propRequired')); return; }
   // Resolve subtype
   const subSelect = f.subtypeSelect.value;
   const subtype = subSelect === '__new__' ? f.newSubtype.value.trim() : (subSelect || '');
@@ -869,15 +968,31 @@ function saveUnit(e, editId) {
   const newFacilities = _selectedFacilities.join(',');
   const newPrice = parseNum(f.price.value);
 
+  let rentHistory = [];
+  const units = getUnits();
+  if (editId) {
+    const old = units.find(x => x.id === editId);
+    if (old) {
+      rentHistory = Array.isArray(old.rentHistory) ? [...old.rentHistory] : [];
+      if (old.price !== newPrice || old.billingCycle !== f.billingCycle.value) {
+        rentHistory.push({
+          at: new Date().toISOString(),
+          price: old.price,
+          billingCycle: old.billingCycle || 'monthly'
+        });
+      }
+    }
+  }
+
   const data = {
     id: editId || DB.genId(), property, subtype, name: f.name.value.trim(),
     type: f.type.value, price: newPrice, billingCycle: f.billingCycle.value,
     ipl: parseNum(f.ipl.value) || 0, sinkingFund: parseNum(f.sinkingFund.value) || 0,
     unitPbb: parseNum(f.unitPbb.value) || 0, unitOtherCost: parseNum(f.unitOtherCost.value) || 0,
     facilities: newFacilities, status: f.status.value,
+    rentHistory,
     createdAt: editId ? (getUnits().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
-  const units = getUnits();
   if (editId) { const i = units.findIndex(x=>x.id===editId); if (i>=0) units[i] = data; }
   else units.push(data);
 
@@ -894,10 +1009,10 @@ function saveUnit(e, editId) {
     if (facChanged || priceChanged) {
       const siblings = units.filter(u => u.property === property && u.subtype === subtype && u.id !== data.id);
       if (siblings.length > 0) {
-        let msg = `Update ${siblings.length} unit lain di "${subtype}"?\n\n`;
-        if (facChanged) msg += '✅ Fasilitas akan diperbarui\n';
-        if (priceChanged) msg += `✅ Harga akan diubah ke ${formatRpFull(newPrice)}\n`;
-        msg += '\nUnit yang sengaja beda bisa diedit ulang nanti.';
+        let msg = t('confirm.updateSiblings', { n: siblings.length, sub: subtype });
+        if (facChanged) msg += t('confirm.updateFac');
+        if (priceChanged) msg += t('confirm.updatePrice', { price: formatRpFull(newPrice) });
+        msg += t('confirm.updateSiblingsTail');
         if (confirm(msg)) {
           siblings.forEach(u => {
             if (facChanged) u.facilities = newFacilities;
@@ -909,14 +1024,14 @@ function saveUnit(e, editId) {
   }
 
   saveUnits(units); closeModal(); refreshCurrentPage();
-  showToast(editId ? 'Unit berhasil diperbarui' : 'Unit berhasil ditambahkan', 'success');
+  showToast(editId ? t('msg.unitUpdated') : t('msg.unitAdded'), 'success');
 }
 
-function deleteUnit(id) { if (!confirm('Hapus unit ini?')) return; saveUnits(getUnits().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
+function deleteUnit(id) { if (!confirm(t('confirm.deleteUnit'))) return; saveUnits(getUnits().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
 
 function filterUnits(f, btn) {
   unitFilter = f;
-  document.querySelectorAll('#page-units .filter-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#page-units .filter-tab').forEach(el => el.classList.remove('active'));
   if (btn) btn.classList.add('active');
   renderUnits();
 }
@@ -971,7 +1086,10 @@ function renderUnits() {
   // Remove props with no filtered units
   const visibleProps = propOrder.filter(p => groups[p].length > 0);
 
-  if (visibleProps.length === 0) { container.innerHTML = `<p class="empty-state">${searchTerm ? 'Tidak ditemukan unit "' + escapeHtml(searchTerm) + '"' : 'Tidak ada unit yang cocok dengan filter.'}</p>`; return; }
+  if (visibleProps.length === 0) {
+    container.innerHTML = '<p class="empty-state">' + (searchTerm ? t('unit.searchNone', { q: escapeHtml(searchTerm) }) : t('unit.filterEmpty')) + '</p>';
+    return;
+  }
 
   container.innerHTML = visibleProps.map(prop => {
     const propUnits = groups[prop];
@@ -994,20 +1112,20 @@ function renderUnits() {
           const facs = u.facilities ? u.facilities.split(',').filter(Boolean).slice(0, 4).map(f => `<span class="facility-tag">${escapeHtml(getFacilityLabel(f.trim()))}</span>`).join('') : '';
           const extraFacs = u.facilities ? u.facilities.split(',').filter(Boolean).length - 4 : 0;
           const floorColor = getFloorColor(u.name);
-          const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="Lantai"></span>` : '';
+          const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="${t('unit.floorTitle')}"></span>` : '';
           const hasPhotos = getUnitPhotos().some(p => p.unitId === u.id);
           const hasHistory = getTenantHistory().some(h => h.unitId === u.id);
           return `<div class="unit-item unit-${u.status}" onclick="showUnitForm(${onclickStrArg(u.id)})">
             <div class="unit-item-left">
               ${floorDot}
               <span class="unit-item-name">${escapeHtml(u.name)}</span>
-              <span class="badge badge-sm ${u.status === 'occupied' ? 'badge-success' : 'badge-warning'}">${u.status === 'occupied' ? 'Terisi' : 'Kosong'}</span>
-              ${hasPhotos ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitPhotos(' + onclickStrArg(u.id) + ')" title="Lihat Foto">📷</span>' : ''}
-              ${hasHistory ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitHistory(' + onclickStrArg(u.id) + ')" title="Riwayat Penyewa">📜</span>' : ''}
+              <span class="badge badge-sm ${u.status === 'occupied' ? 'badge-success' : 'badge-warning'}">${u.status === 'occupied' ? t('form.occupied') : t('form.vacant')}</span>
+              ${hasPhotos ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitPhotos(' + onclickStrArg(u.id) + ')" title="' + escapeHtml(t('unit.viewPhotos')) + '">📷</span>' : ''}
+              ${hasHistory ? '<span style="font-size:12px;cursor:pointer" onclick="event.stopPropagation();showUnitHistory(' + onclickStrArg(u.id) + ')" title="' + escapeHtml(t('unit.historyTenants')) + '">📜</span>' : ''}
             </div>
             <div class="unit-item-right">
-              <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?'thn':'bln'}</span></span>
-              ${getUnitMonthlyCost(u) > 0 ? `<div style="font-size:10px;color:var(--danger);font-weight:600;margin-top:2px">-${formatRp(getUnitMonthlyCost(u))}/bln</div>` : ''}
+              <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?t('period.yr'):t('period.mo')}</span></span>
+              ${getUnitMonthlyCost(u) > 0 ? `<div style="font-size:10px;color:var(--danger);font-weight:600;margin-top:2px">-${formatRp(getUnitMonthlyCost(u))}${t('unit.perCostMo')}</div>` : ''}
             </div>
             ${facs ? `<div class="unit-item-facs">${facs}${extraFacs > 0 ? `<span class="facility-tag fac-more">+${extraFacs}</span>` : ''}</div>` : ''}
           </div>`;
@@ -1020,12 +1138,12 @@ function renderUnits() {
       <div class="prop-group-header" onclick="togglePropertyGroup(${onclickStrArg(prop)})">
         <div class="prop-group-info">
           <div class="prop-group-name">${icons[type] || '🏠'} ${escapeHtml(prop)}</div>
-          <div class="prop-group-stats">${occCount}/${totalCount} terisi · ${formatRp(monthlyIncome)}/bln</div>
+          <div class="prop-group-stats">${t('unit.propStats', { occ: occCount, total: totalCount, income: formatRp(monthlyIncome), mo: t('period.mo') })}</div>
         </div>
         <div class="prop-group-actions">
-          <button class="prop-action-btn add" onclick="event.stopPropagation(); addUnitForProperty(${onclickStrArg(prop)})" title="Tambah Unit">+</button>
-          ${isProMode() ? `<button class="prop-action-btn bulk" onclick="event.stopPropagation(); showBulkAddForm(${onclickStrArg(prop)})" title="Tambah Massal">⊞</button>` : ''}
-          <button class="prop-action-btn settings" onclick="event.stopPropagation(); showPropertySettings(${onclickStrArg(prop)})" title="Pengaturan Properti">⚙</button>
+          <button class="prop-action-btn add" onclick="event.stopPropagation(); addUnitForProperty(${onclickStrArg(prop)})" title="${escapeHtml(t('unit.addBtnTitle'))}">+</button>
+          ${isProMode() ? `<button class="prop-action-btn bulk" onclick="event.stopPropagation(); showBulkAddForm(${onclickStrArg(prop)})" title="${escapeHtml(t('unit.bulkTitle'))}">⊞</button>` : ''}
+          <button class="prop-action-btn settings" onclick="event.stopPropagation(); showPropertySettings(${onclickStrArg(prop)})" title="${escapeHtml(t('unit.settingsTitle'))}">⚙</button>
           <span class="prop-group-chevron ${collapsed ? 'collapsed' : ''}">▼</span>
         </div>
       </div>
@@ -1044,38 +1162,38 @@ function calcDefaultDueDay(startDate) {
 }
 
 function showTenantForm(editId) {
-  const tenants = getTenants(), t = editId ? tenants.find(x=>x.id===editId) : null;
+  const tenants = getTenants(), tn = editId ? tenants.find(x=>x.id===editId) : null;
   const units = getUnits();
   const taken = tenants.filter(x=>x.id!==editId).map(x=>x.unitId);
-  const avail = units.filter(u => !taken.includes(u.id) || (t && t.unitId === u.id));
-  const defaultDueDay = t?.dueDay || '';
+  const avail = units.filter(u => !taken.includes(u.id) || (tn && tn.unitId === u.id));
+  const defaultDueDay = tn?.dueDay || '';
 
-  openModal(t ? 'Edit Penyewa' : 'Tambah Penyewa', `
+  openModal(tn ? t('form.editTenant') : t('form.addTenant'), `
     <form onsubmit="saveTenant(event,'${editId||''}')">
-      <div class="form-group"><label class="form-label">Nama</label>
-        <input class="form-input" name="name" required placeholder="Nama lengkap" value="${t?.name||''}"></div>
-      <div class="form-group"><label class="form-label">No. HP / WhatsApp</label>
-        <input class="form-input" name="phone" type="tel" placeholder="08xxxxxxxxxx" value="${t?.phone||''}"></div>
-      <div class="form-group"><label class="form-label">Unit</label>
-        <select class="form-select" name="unitId" required><option value="">Pilih unit...</option>
-          ${avail.map(u=>`<option value="${u.id}" ${t?.unitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Mulai Sewa</label>
-        <input class="form-input" name="startDate" type="date" required value="${t?.startDate||''}" onchange="onTenantStartDateChange(this.value)"></div>
-      <div class="form-group"><label class="form-label">Akhir Kontrak</label>
-        <input class="form-input" name="endDate" type="date" required value="${t?.endDate||''}"></div>
-      <div class="form-group"><label class="form-label">Tgl Jatuh Tempo (tiap bulan)</label>
-        <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="31" placeholder="Auto: 1 hari sebelum mulai sewa" value="${defaultDueDay}">
-        <small style="color:var(--text-muted);display:block;margin-top:4px">Tanggal jatuh tempo pembayaran sewa tiap bulan. Kosongkan = otomatis 1 hari sebelum tanggal mulai sewa.</small></div>
-      <div class="form-group"><label class="form-label">Deposit (Rp)</label>
-        <input class="form-input" name="deposit" type="text" inputmode="numeric" data-rp placeholder="0" value="${t?.deposit ? formatNumDots(t.deposit) : ''}"></div>
-      <div class="form-group"><label class="form-label">Catatan</label>
-        <textarea class="form-textarea" name="notes" placeholder="Catatan...">${t?.notes||''}</textarea></div>
-      <button type="submit" class="btn btn-primary">${t?'Simpan':'Tambah Penyewa'}</button>
-      ${t?`<div class="btn-group">
-        <button type="button" class="btn btn-outline" onclick="regeneratePayments('${editId}')">🔄 Regenerate Tagihan</button>
-        <button type="button" class="btn btn-outline" onclick="downloadContract('${editId}')">📄 Buat Kontrak</button>
-        <button type="button" class="btn btn-warning" onclick="archiveTenant('${editId}')">📦 Akhiri Kontrak</button>
-        <button type="button" class="btn btn-danger" onclick="deleteTenant('${editId}')">Hapus</button>
+      <div class="form-group"><label class="form-label">${t('form.name')}</label>
+        <input class="form-input" name="name" required placeholder="${t('form.fullNamePh')}" value="${tn?.name||''}"></div>
+      <div class="form-group"><label class="form-label">${t('form.phone')}</label>
+        <input class="form-input" name="phone" type="tel" placeholder="${t('form.phonePh')}" value="${tn?.phone||''}"></div>
+      <div class="form-group"><label class="form-label">${t('form.unitLabel')}</label>
+        <select class="form-select" name="unitId" required><option value="">${t('form.pickUnit')}</option>
+          ${avail.map(u=>`<option value="${u.id}" ${tn?.unitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">${t('form.leaseStart')}</label>
+        <input class="form-input" name="startDate" type="date" required value="${tn?.startDate||''}" onchange="onTenantStartDateChange(this.value)"></div>
+      <div class="form-group"><label class="form-label">${t('form.leaseEnd')}</label>
+        <input class="form-input" name="endDate" type="date" required value="${tn?.endDate||''}"></div>
+      <div class="form-group"><label class="form-label">${t('form.dueDay')}</label>
+        <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="31" placeholder="${t('form.dueDayPh')}" value="${defaultDueDay}">
+        <small style="color:var(--text-muted);display:block;margin-top:4px">${t('form.dueDayHelp')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.deposit')}</label>
+        <input class="form-input" name="deposit" type="text" inputmode="numeric" data-rp placeholder="0" value="${tn?.deposit ? formatNumDots(tn.deposit) : ''}"></div>
+      <div class="form-group"><label class="form-label">${t('form.notes')}</label>
+        <textarea class="form-textarea" name="notes" placeholder="${t('form.notesPh')}">${tn?.notes||''}</textarea></div>
+      <button type="submit" class="btn btn-primary">${tn ? t('form.save') : t('form.addTenant')}</button>
+      ${tn?`<div class="btn-group">
+        <button type="button" class="btn btn-outline" onclick="regeneratePayments('${editId}')">${t('form.regenBills')}</button>
+        <button type="button" class="btn btn-outline" onclick="downloadContract('${editId}')">${t('form.makeContract')}</button>
+        <button type="button" class="btn btn-warning" onclick="showArchiveTenantModal(${onclickStrArg(editId)})">${t('form.endLease')}</button>
+        <button type="button" class="btn btn-danger" onclick="deleteTenant('${editId}')">${t('form.delete')}</button>
       </div>`:''}
     </form>
   `);
@@ -1085,7 +1203,7 @@ function showTenantForm(editId) {
 function onTenantStartDateChange(val) {
   const dueDayEl = document.getElementById('tenant-due-day');
   if (dueDayEl && !dueDayEl.value) {
-    dueDayEl.placeholder = `Default: tgl ${calcDefaultDueDay(val)}`;
+    dueDayEl.placeholder = t('tenant.defaultDuePh', { n: calcDefaultDueDay(val) });
   }
 }
 
@@ -1118,7 +1236,7 @@ function generatePaymentsForTenant(tenant) {
         id: DB.genId(), type: 'income', tenantId: tenant.id,
         propertyName: unit.property, amount, period, dueDate,
         status: 'pending',
-        description: `Sewa Tahunan ${unit.name} — ${tenant.name} (${yr})`,
+        description: t('pay.descYearly', { unit: unit.name, name: tenant.name, yr }),
         autoGenerated: true, billingCycle: 'yearly',
         createdAt: new Date().toISOString()
       });
@@ -1143,7 +1261,7 @@ function generatePaymentsForTenant(tenant) {
         id: DB.genId(), type: 'income', tenantId: tenant.id,
         propertyName: unit.property, amount, period, dueDate,
         status: 'pending',
-        description: `Sewa ${unit.name} — ${tenant.name}`,
+        description: t('pay.descMonthly', { unit: unit.name, name: tenant.name }),
         autoGenerated: true, billingCycle: 'monthly',
         createdAt: new Date().toISOString()
       });
@@ -1159,10 +1277,25 @@ function saveTenant(e, editId) {
   e.preventDefault(); const f = e.target;
   const dueDayVal = f.dueDay.value ? Number(f.dueDay.value) : 0;
 
+  let vacancyDaysBeforeMoveIn = null;
+  if (!editId) {
+    const hist = getTenantHistory().filter(h => h.unitId === f.unitId.value)
+      .sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+    if (hist.length && f.startDate.value) {
+      const sd = parseYMD(f.startDate.value);
+      const ar = new Date(hist[0].archivedAt);
+      if (sd && !isNaN(ar.getTime())) {
+        const gap = Math.round((sd.getTime() - ar.getTime()) / 864e5);
+        if (!isNaN(gap) && gap >= 0) vacancyDaysBeforeMoveIn = gap;
+      }
+    }
+  }
+
   const data = { id: editId || DB.genId(), name: f.name.value.trim(), phone: f.phone.value.trim(),
     unitId: f.unitId.value, startDate: f.startDate.value, endDate: f.endDate.value,
     dueDay: dueDayVal || calcDefaultDueDay(f.startDate.value),
     deposit: parseNum(f.deposit.value)||0, notes: f.notes.value.trim(),
+    vacancyDaysBeforeMoveIn: editId ? (getTenants().find(x=>x.id===editId)?.vacancyDaysBeforeMoveIn ?? null) : vacancyDaysBeforeMoveIn,
     createdAt: editId ? (getTenants().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
   const tenants = getTenants();
@@ -1183,10 +1316,10 @@ function saveTenant(e, editId) {
       savePayments(payments);
       // Mark past-due ones as overdue
       updateOverduePayments();
-      showToast(`Penyewa ditambahkan! ${newPayments.length} tagihan dibuat`, 'success', 3000);
+      showToast(t('msg.tenantAddedBills', { n: newPayments.length }), 'success', 3000);
     }
   } else {
-    showToast('Penyewa berhasil diperbarui', 'success');
+    showToast(t('msg.tenantUpdated'), 'success');
   }
 
   closeModal(); refreshCurrentPage();
@@ -1214,12 +1347,12 @@ function regeneratePayments(tenantId) {
   savePayments(kept);
   updateOverduePayments();
 
-  alert(`🔄 Tagihan di-regenerate!\n✅ ${toAdd.length} tagihan baru\n💰 ${paidPeriods.length} yang sudah lunas tetap dipertahankan`);
+  alert(t('msg.billsRegen', { new: toAdd.length, kept: paidPeriods.length }));
   closeModal(); refreshCurrentPage();
 }
 
 function deleteTenant(id) {
-  if (!confirm('Hapus penyewa ini?\n\nTagihan yang belum dibayar juga akan dihapus.\nTagihan yang sudah lunas tetap disimpan.')) return;
+  if (!confirm(t('confirm.deleteTenant'))) return;
   const t = getTenants().find(x=>x.id===id);
   saveTenants(getTenants().filter(x=>x.id!==id));
   if (t) {
@@ -1244,19 +1377,19 @@ function renderTenants() {
   const q = (document.getElementById('search-tenant')?.value||'').toLowerCase();
   const filtered = tenants.filter(t => t.name.toLowerCase().includes(q));
   const container = document.getElementById('tenant-list');
-  if (filtered.length === 0) { container.innerHTML = q ? '<p class="empty-state">Tidak ditemukan penyewa "' + escapeHtml(q) + '"</p>' : emptyStateHTML('tenant'); return; }
-  container.innerHTML = filtered.map(t => {
-    const unit = units.find(u=>u.id===t.unitId);
-    const dl = daysUntil(t.endDate);
-    let badge = dl < 0 ? '<span class="badge badge-danger">Expired</span>' : dl <= 30 ? `<span class="badge badge-warning">${dl}d</span>` : '<span class="badge badge-success">Aktif</span>';
-    const ini = escapeHtml(t.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
-    return `<div class="list-item" onclick="showTenantForm(${onclickStrArg(t.id)})">
+  if (filtered.length === 0) { container.innerHTML = q ? '<p class="empty-state">' + t('tenant.searchNone', { q: escapeHtml(q) }) + '</p>' : emptyStateHTML('tenant'); return; }
+  container.innerHTML = filtered.map(tn => {
+    const unit = units.find(u=>u.id===tn.unitId);
+    const dl = daysUntil(tn.endDate);
+    let badge = dl < 0 ? '<span class="badge badge-danger">' + t('tenant.badgeExpired') + '</span>' : dl <= 30 ? `<span class="badge badge-warning">${dl}d</span>` : '<span class="badge badge-success">' + t('tenant.badgeActive') + '</span>';
+    const ini = escapeHtml(tn.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+    return `<div class="list-item" onclick="showTenantForm(${onclickStrArg(tn.id)})">
       <div style="display:flex;gap:14px;align-items:center">
         <div style="width:44px;height:44px;border-radius:14px;background:var(--gradient);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:15px;flex-shrink:0">${ini}</div>
         <div style="flex:1;min-width:0">
-          <div class="list-item-header" style="margin-bottom:4px"><span class="list-item-title">${escapeHtml(t.name)}</span>${badge}</div>
-          <div class="list-item-subtitle" style="margin-bottom:2px">${unit ? escapeHtml(unit.property + ' — ' + unit.name) : 'Unit ?'}</div>
-          <div class="list-item-row"><span class="list-item-detail">${formatDate(t.startDate)} — ${formatDate(t.endDate)}</span><span class="list-item-detail">${escapeHtml(t.phone || '')}</span></div>
+          <div class="list-item-header" style="margin-bottom:4px"><span class="list-item-title">${escapeHtml(tn.name)}</span>${badge}</div>
+          <div class="list-item-subtitle" style="margin-bottom:2px">${unit ? escapeHtml(unit.property + ' — ' + unit.name) : t('tenant.unitUnknown')}</div>
+          <div class="list-item-row"><span class="list-item-detail">${formatDate(tn.startDate)} — ${formatDate(tn.endDate)}</span><span class="list-item-detail">${escapeHtml(tn.phone || '')}</span></div>
         </div></div></div>`;
   }).join('');
 }
@@ -1280,38 +1413,38 @@ function showPaymentForm(editId) {
   const payments = getPayments(), p = editId ? payments.find(x=>x.id===editId) : null;
   const tenants = getTenants(), units = getUnits();
   const expCat = p?.expenseCategory || 'other';
-  openModal(p ? 'Edit Pembayaran' : 'Catat Pembayaran', `
+  openModal(p ? t('form.editPayment') : t('form.recordPayment'), `
     <form onsubmit="savePayment(event,'${editId||''}')">
-      <div class="form-group"><label class="form-label">Tipe</label>
+      <div class="form-group"><label class="form-label">${t('form.paymentType')}</label>
         <select class="form-select" name="type" onchange="togglePaymentFields(this.value)">
-          <option value="income" ${p?.type==='income'?'selected':''}>Pemasukan (Sewa)</option>
-          <option value="expense" ${p?.type==='expense'?'selected':''}>Pengeluaran</option></select></div>
-      <div class="form-group" id="fg-tenant"><label class="form-label">Penyewa</label>
-        <select class="form-select" name="tenantId"><option value="">Pilih...</option>
-          ${tenants.map(t=>{const u=units.find(x=>x.id===t.unitId);return`<option value="${t.id}" ${p?.tenantId===t.id?'selected':''}>${t.name} (${u?u.name:'-'})</option>`;}).join('')}</select></div>
-      <div class="form-group" id="fg-property"><label class="form-label">Properti</label>
-        <select class="form-select" name="propertyName"><option value="">Pilih...</option>
+          <option value="income" ${p?.type==='income'?'selected':''}>${t('form.typeIncome')}</option>
+          <option value="expense" ${p?.type==='expense'?'selected':''}>${t('form.typeExpense')}</option></select></div>
+      <div class="form-group" id="fg-tenant"><label class="form-label">${t('form.tenant')}</label>
+        <select class="form-select" name="tenantId"><option value="">${t('form.pick')}</option>
+          ${tenants.map(tn=>{const u=units.find(x=>x.id===tn.unitId);return`<option value="${tn.id}" ${p?.tenantId===tn.id?'selected':''}>${tn.name} (${u?u.name:'-'})</option>`;}).join('')}</select></div>
+      <div class="form-group" id="fg-property"><label class="form-label">${t('form.property')}</label>
+        <select class="form-select" name="propertyName"><option value="">${t('form.pick')}</option>
           ${[...new Set(units.map(u=>u.property))].map(pr=>`<option value="${pr}" ${p?.propertyName===pr?'selected':''}>${pr}</option>`).join('')}</select></div>
-      <div class="form-group" id="fg-expense-category" style="display:none"><label class="form-label">Kategori Pengeluaran</label>
+      <div class="form-group" id="fg-expense-category" style="display:none"><label class="form-label">${t('form.expenseCat')}</label>
         <select class="form-select" name="expenseCategory">
-          ${EXPENSE_CATEGORIES.map(c=>`<option value="${c.id}" ${expCat===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
-      <div class="form-group" id="fg-expense-unit" style="display:none"><label class="form-label">Unit (opsional, untuk pengeluaran spesifik unit)</label>
-        <select class="form-select" name="expenseUnitId"><option value="">Semua / Umum</option>
+          ${EXPENSE_CATEGORIES.map(c=>`<option value="${c.id}" ${expCat===c.id?'selected':''}>${getExpenseCategoryLabel(c.id)}</option>`).join('')}</select></div>
+      <div class="form-group" id="fg-expense-unit" style="display:none"><label class="form-label">${t('form.expenseUnit')}</label>
+        <select class="form-select" name="expenseUnitId"><option value="">${t('form.expenseUnitAll')}</option>
           ${units.map(u=>`<option value="${u.id}" ${p?.expenseUnitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Jumlah (Rp)</label>
+      <div class="form-group"><label class="form-label">${t('form.amount')}</label>
         <input class="form-input" name="amount" type="text" inputmode="numeric" data-rp required placeholder="1.500.000" value="${p?.amount ? formatNumDots(p.amount) : ''}"></div>
-      <div class="form-group"><label class="form-label">Periode</label>
+      <div class="form-group"><label class="form-label">${t('form.period')}</label>
         <input class="form-input" name="period" type="month" required value="${p?.period||getMonthYear()}"></div>
-      <div class="form-group"><label class="form-label">Jatuh Tempo</label>
+      <div class="form-group"><label class="form-label">${t('form.dueDate')}</label>
         <input class="form-input" name="dueDate" type="date" required value="${p?.dueDate||''}"></div>
-      <div class="form-group"><label class="form-label">Status</label>
+      <div class="form-group"><label class="form-label">${t('form.status')}</label>
         <select class="form-select" name="status">
-          <option value="pending" ${p?.status==='pending'?'selected':''}>Belum Bayar</option>
-          <option value="paid" ${p?.status==='paid'?'selected':''}>Lunas</option></select></div>
-      <div class="form-group"><label class="form-label">Keterangan</label>
-        <input class="form-input" name="description" placeholder="Sewa bulan..." value="${p?.description||''}"></div>
-      <button type="submit" class="btn btn-primary">${p?'Simpan':'Simpan'}</button>
-      ${p?`<div class="btn-group">${p.status!=='paid'?`<button type="button" class="btn btn-success" onclick="markPaid('${editId}')">Tandai Lunas</button>`:''}<button type="button" class="btn btn-danger" onclick="deletePayment('${editId}')">Hapus</button></div>`:''}
+          <option value="pending" ${p?.status==='pending'?'selected':''}>${t('pay.pending')}</option>
+          <option value="paid" ${p?.status==='paid'?'selected':''}>${t('pay.paid')}</option></select></div>
+      <div class="form-group"><label class="form-label">${t('form.desc')}</label>
+        <input class="form-input" name="description" placeholder="${t('form.descPh')}" value="${p?.description||''}"></div>
+      <button type="submit" class="btn btn-primary">${t('form.save')}</button>
+      ${p?`<div class="btn-group">${p.status!=='paid'?`<button type="button" class="btn btn-success" onclick="markPaid('${editId}')">${t('form.markPaid')}</button>`:''}<button type="button" class="btn btn-danger" onclick="deletePayment('${editId}')">${t('form.delete')}</button></div>`:''}
     </form>
     <script>togglePaymentFields('${p?.type||'income'}')<\/script>
   `);
@@ -1346,17 +1479,17 @@ function savePayment(e, editId) {
   if (editId) { const i = payments.findIndex(x=>x.id===editId); if (i>=0) payments[i]=data; }
   else payments.push(data);
   savePayments(payments); closeModal(); refreshCurrentPage();
-  showToast(editId ? 'Pembayaran diperbarui' : (data.type === 'expense' ? 'Pengeluaran dicatat' : 'Pembayaran dicatat'), 'success');
+  showToast(editId ? t('msg.paymentUpdated') : (data.type === 'expense' ? t('msg.expenseRecorded') : t('msg.paymentRecorded')), 'success');
 }
 
 function markPaid(id) {
   const p = getPayments(); const i = p.findIndex(x=>x.id===id);
   if (i>=0) { p[i].status='paid'; p[i].paidDate=new Date().toISOString(); savePayments(p); }
   closeModal(); refreshCurrentPage();
-  showToast('Ditandai lunas', 'success');
+  showToast(t('msg.markedPaid'), 'success');
 }
 
-function deletePayment(id) { if (!confirm('Hapus?')) return; savePayments(getPayments().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
+function deletePayment(id) { if (!confirm(t('confirm.deleteShort'))) return; savePayments(getPayments().filter(x=>x.id!==id)); closeModal(); refreshCurrentPage(); }
 
 function filterPayments(f, btn) {
   paymentFilter = f;
@@ -1376,22 +1509,22 @@ function setPaymentViewMode(mode, btn) {
 }
 
 function paymentRowHtml(p, tenants) {
-  const t = tenants.find(x => x.id === p.tenantId);
-  const st = { paid: { b: 'badge-success', l: '✅ Lunas' }, pending: { b: 'badge-warning', l: '⏳ Pending' }, overdue: { b: 'badge-danger', l: '⚠️ Nunggak' } }[p.status] || { b: 'badge-warning', l: '⏳ Pending' };
+  const tn = tenants.find(x => x.id === p.tenantId);
+  const st = { paid: { b: 'badge-success', l: t('pay.stPaid') }, pending: { b: 'badge-warning', l: t('pay.stPending') }, overdue: { b: 'badge-danger', l: t('pay.stOverdue') } }[p.status] || { b: 'badge-warning', l: t('pay.stPending') };
   const isExp = p.type === 'expense';
   const isPaid = p.status === 'paid';
   const dl = daysUntil(p.dueDate);
-  const dueLabel = isPaid ? `Dibayar ${p.paidDate ? formatDate(p.paidDate) : ''}` : dl < 0 ? `Terlambat ${Math.abs(dl)} hari` : dl === 0 ? 'Jatuh tempo HARI INI' : dl <= 5 ? `H-${dl} hari lagi` : `Due: ${formatDate(p.dueDate)}`;
+  const dueLabel = isPaid ? t('pay.paidOn', { date: p.paidDate ? formatDate(p.paidDate) : '' }) : dl < 0 ? t('pay.lateDays', { n: Math.abs(dl) }) : dl === 0 ? t('pay.dueToday') : dl <= 5 ? t('pay.dueIn', { n: dl }) : t('pay.dueLabel', { date: formatDate(p.dueDate) });
   const dueColor = isPaid ? 'var(--success)' : dl <= 0 ? 'var(--danger)' : dl <= 5 ? '#d97706' : 'var(--text-muted)';
-  const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid(${onclickStrArg(p.id)}, event)" title="${isPaid ? 'Batalkan' : 'Tandai Lunas'}">
+  const toggleBtn = !isExp ? `<button class="pay-toggle-btn ${isPaid ? 'paid' : ''}" onclick="quickTogglePaid(${onclickStrArg(p.id)}, event)" title="${isPaid ? t('form.cancelMark') : t('form.markPaid')}">
       ${isPaid ? '✅' : '☐'}
     </button>` : '';
   return `<div class="list-item payment-item ${isPaid ? 'payment-paid' : ''} status-${isExp ? 'expense' : p.status}" onclick="showPaymentForm(${onclickStrArg(p.id)})">
       <div style="display:flex;gap:12px;align-items:flex-start;width:100%">
         ${toggleBtn}
         <div style="flex:1;min-width:0">
-          <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(t?.name || 'Penyewa')}</span><span class="badge ${st.b}">${st.l}</span></div>
-          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || 'Sewa ' + p.period)}</div>
+          <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(tn?.name || t('pay.tenantWord'))}</span><span class="badge ${st.b}">${st.l}</span></div>
+          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || t('pay.rentFallback', { period: p.period }))}</div>
           <div class="list-item-row" style="margin-top:6px">
             <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
             <span style="font-weight:800;font-size:15px;color:${isExp ? 'var(--danger)' : 'var(--success)'}">${isExp ? '-' : '+'}${formatRpFull(p.amount)}</span>
@@ -1406,9 +1539,9 @@ function paymentGroupBadgeRow(items) {
   const nPending = items.filter(p => p.status === 'pending').length;
   const nPaid = items.filter(p => p.status === 'paid').length;
   let html = '';
-  if (nOverdue) html += `<span class="pg-mini pg-mini-overdue">${nOverdue} nunggak</span>`;
-  if (nPending) html += `<span class="pg-mini pg-mini-pending">${nPending} pending</span>`;
-  if (nPaid) html += `<span class="pg-mini pg-mini-paid">${nPaid} lunas</span>`;
+  if (nOverdue) html += `<span class="pg-mini pg-mini-overdue">${t('pay.miniOver', { n: nOverdue })}</span>`;
+  if (nPending) html += `<span class="pg-mini pg-mini-pending">${t('pay.miniPending', { n: nPending })}</span>`;
+  if (nPaid) html += `<span class="pg-mini pg-mini-paid">${t('pay.miniPaid', { n: nPaid })}</span>`;
   return html ? `<div class="payment-group-badges">${html}</div>` : '';
 }
 
@@ -1432,7 +1565,7 @@ function quickTogglePaid(id, ev) {
   }
   savePayments(payments);
   refreshCurrentPage();
-  showToast(p.status === 'paid' ? 'Ditandai lunas' : 'Status dibatalkan', p.status === 'paid' ? 'success' : 'info');
+  showToast(p.status === 'paid' ? t('msg.markedPaid') : t('msg.statusReverted'), p.status === 'paid' ? 'success' : 'info');
 }
 
 function renderPayments() {
@@ -1478,16 +1611,16 @@ function renderPayments() {
     let titleText, metaLine;
 
     if (k === '_expenses') {
-      titleText = 'Pengeluaran & umum';
-      metaLine = `${items.length} transaksi`;
+      titleText = t('pay.groupExp');
+      metaLine = t('pay.groupTx', { n: items.length });
     } else if (k === '_income_loose') {
-      titleText = 'Sewa tanpa penyewa terhubung';
-      metaLine = `${items.length} tagihan — hubungkan ke penyewa di edit tagihan`;
+      titleText = t('pay.groupLoose');
+      metaLine = t('pay.groupLooseHint', { n: items.length });
     } else {
-      const t = tenants.find(x => x.id === k);
-      const u = t ? units.find(x => x.id === t.unitId) : null;
-      titleText = t?.name || 'Penyewa (data hilang)';
-      metaLine = u ? `${u.property} · ${u.name}` : (t ? 'Belum ada unit terpasang' : '');
+      const tn = tenants.find(x => x.id === k);
+      const u = tn ? units.find(x => x.id === tn.unitId) : null;
+      titleText = tn?.name || t('pay.tenantMissing');
+      metaLine = u ? `${u.property} · ${u.name}` : (tn ? t('pay.noUnitLinked') : '');
     }
 
     const openAttr = paymentGroupDefaultOpen(items) ? ' open' : '';
@@ -1526,17 +1659,18 @@ function renderDashboard() {
   document.getElementById('greeting-container').innerHTML = `
     <div class="greeting-banner">
       <div class="greeting-text">${getGreeting()} 👋</div>
-      <div class="greeting-name">${simple ? 'Selamat datang!' : 'Investor!'}</div>
+      <div class="greeting-name">${simple ? t('dash.welcome') : t('dash.investor')}</div>
       <div class="quick-stats">
-        <div class="quick-stat"><span class="quick-stat-value">${total}</span><span class="quick-stat-label">Unit</span></div>
-        <div class="quick-stat"><span class="quick-stat-value">${occupancy}%</span><span class="quick-stat-label">${simple ? '% terisi' : 'Occupancy'}</span></div>
-        <div class="quick-stat"><span class="quick-stat-value">${occ}</span><span class="quick-stat-label">${simple ? 'Kamar terisi' : 'Terisi'}</span></div>
-        <div class="quick-stat"><span class="quick-stat-value" ${overdue>0?'style="color:#ef4444"':''}>${overdue}</span><span class="quick-stat-label">Nunggak</span></div>
+        <div class="quick-stat"><span class="quick-stat-value">${total}</span><span class="quick-stat-label">${t('stat.unit')}</span></div>
+        <div class="quick-stat"><span class="quick-stat-value">${occupancy}%</span><span class="quick-stat-label">${simple ? t('stat.occPct') : t('stat.occ')}</span></div>
+        <div class="quick-stat"><span class="quick-stat-value">${occ}</span><span class="quick-stat-label">${simple ? t('stat.filled') : t('stat.filledPro')}</span></div>
+        <div class="quick-stat"><span class="quick-stat-value" ${overdue>0?'style="color:#ef4444"':''}>${overdue}</span><span class="quick-stat-label">${t('stat.overdue')}</span></div>
       </div>
+      <button type="button" class="greeting-cal-jump" onclick="var el=document.getElementById('dash-biz-cal');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})">${t('dash.jumpCal')}</button>
     </div>`;
 
   const cfTitle = document.getElementById('dash-cf-title');
-  if (cfTitle) cfTitle.textContent = simple ? 'Uang masuk & keluar (bulan ini)' : 'Cashflow Bulan Ini';
+  if (cfTitle) cfTitle.textContent = simple ? t('dash.cfSimple') : t('dash.cfPro');
 
   document.getElementById('cf-income').textContent = formatRpFull(inc);
   document.getElementById('cf-expense').textContent = formatRpFull(exp);
@@ -1545,11 +1679,11 @@ function renderDashboard() {
   // Upcoming dues
   const pending = payments.filter(p=>p.status==='pending'||p.status==='overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,5);
   const dc = document.getElementById('upcoming-dues');
-  if (!pending.length) dc.innerHTML = '<p class="empty-state">Tidak ada tagihan tertunda</p>';
+  if (!pending.length) dc.innerHTML = '<p class="empty-state">' + t('dash.noDues') + '</p>';
   else dc.innerHTML = pending.map(p => {
-    const t = tenants.find(x=>x.id===p.tenantId), d = daysUntil(p.dueDate);
-    const lbl = d<0 ? `<span class="overdue-tag">Terlambat ${Math.abs(d)} hari</span>` : `<span class="upcoming-tag">${d} hari lagi</span>`;
-    return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(t?.name || 'Pengeluaran')}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
+    const tnt = tenants.find(x=>x.id===p.tenantId), d = daysUntil(p.dueDate);
+    const lbl = d<0 ? `<span class="overdue-tag">${t('dash.overdue', { n: Math.abs(d) })}</span>` : `<span class="upcoming-tag">${t('dash.inDays', { n: d })}</span>`;
+    return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(tnt?.name || t('dash.expenseLbl'))}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
   }).join('');
 
   // ROI Cards (Pro saja)
@@ -1562,18 +1696,35 @@ function renderDashboard() {
   // Properties
   const props = [...new Set(units.map(u=>u.property))];
   const pc = document.getElementById('dashboard-properties');
-  if (!props.length) pc.innerHTML = '<p class="empty-state">Belum ada properti</p>';
+  if (!props.length) pc.innerHTML = '<p class="empty-state">' + t('dash.propertiesEmpty') + '</p>';
   else pc.innerHTML = props.map(prop => {
     const pu = units.filter(u=>u.property===prop), po = pu.filter(u=>u.status==='occupied').length, pt = pu.length;
     const o = pt>0?Math.round((po/pt)*100):0, circ = 2*Math.PI*16, off = circ-(o/100)*circ;
     const col = o>=80?'var(--success)':o>=50?'var(--warning-dark)':'var(--danger)';
     return `<div class="property-mini"><div class="property-mini-info"><span class="property-mini-name">${escapeHtml(prop)}</span>
-      <span class="property-mini-detail">${po}/${pt} terisi · ${formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0))}/bln</span></div>
+      <span class="property-mini-detail">${t('dash.occupiedDetail', { po, pt, rent: formatRp(pu.reduce((s,u)=>s+(u.status==='occupied'?getUnitMonthlyRent(u):0),0)) })}</span></div>
       <div class="occ-ring"><svg width="44" height="44" viewBox="0 0 44 44">
         <circle cx="22" cy="22" r="16" fill="none" stroke="var(--border)" stroke-width="4"/>
         <circle cx="22" cy="22" r="16" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${circ}" stroke-dashoffset="${off}" stroke-linecap="round"/>
       </svg><span class="occ-ring-text" style="color:${col}">${o}%</span></div></div>`;
   }).join('');
+
+  const dbc = document.getElementById('dashboard-business-calendar');
+  if (dbc) {
+    const rem = collectBusinessReminders(60, 90);
+    const slice = rem.slice(0, 7);
+    const remHtml = slice.length
+      ? slice.map(r =>
+          `<div class="biz-cal-row dash ${r.level}"><span class="biz-cal-dot"></span><div><div class="biz-cal-title">${escapeHtml(r.title)}</div><div class="biz-cal-sub">${escapeHtml(r.sub)}</div></div><span class="biz-cal-when">${escapeHtml(r.whenLabel)}</span></div>`).join('')
+      : '<p class="empty-state">' + t('dash.calEmpty') + '</p>';
+    let more = '';
+    if (isProMode()) {
+      more = rem.length > slice.length
+        ? `<p class="yield-cap-micro dash-cal-more">${t('dash.calMore', { n: rem.length - slice.length })}<button type="button" class="btn-link-cal" onclick="openReportTab('insight')">${t('dash.calOpenInsight')}</button></p>`
+        : (rem.length ? `<p class="yield-cap-micro dash-cal-more"><button type="button" class="btn-link-cal" onclick="openReportTab('insight')">${t('dash.calDetailInsight')}</button></p>` : '');
+    }
+    dbc.innerHTML = `<div class="biz-cal-list">${remHtml}</div>${more}`;
+  }
 }
 
 // ===== REPORTS (Overview + Yield + Analytics + Multi) =====
@@ -1587,6 +1738,23 @@ function switchReportTab(tab, btn) {
   document.querySelectorAll('.rpt-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(`rpt-tab-${tab}`).classList.add('active');
   renderReports();
+}
+
+/** Pindah ke Laporan + sub-tab (mis. dari kartu dashboard). */
+function openReportTab(tab) {
+  if (isSimpleMode()) {
+    navigateTo('reports');
+    return;
+  }
+  reportTab = tab;
+  navigateTo('reports');
+  document.querySelectorAll('#page-reports > .filter-tabs.ui-pro-only .filter-tab').forEach(t => {
+    t.classList.remove('active');
+    if ((t.getAttribute('onclick') || '').includes(`'${tab}'`)) t.classList.add('active');
+  });
+  document.querySelectorAll('#page-reports .rpt-tab').forEach(t => t.classList.remove('active'));
+  const panel = document.getElementById(`rpt-tab-${tab}`);
+  if (panel) panel.classList.add('active');
 }
 
 function changeReportPeriod(p, btn) {
@@ -1612,6 +1780,8 @@ function renderReports() {
   else if (reportTab === 'multi') renderMultiProperty();
   else if (reportTab === 'kpr') renderKPRSimulator();
   else if (reportTab === 'charts') renderCharts();
+  else if (reportTab === 'stress') renderStressTest();
+  else if (reportTab === 'insight') renderInvestorInsight();
 }
 
 function renderOverview() {
@@ -1637,7 +1807,7 @@ function renderOverview() {
   // P&L per property
   const props = [...new Set(units.map(u=>u.property))];
   const pnl = document.getElementById('report-per-property');
-  if (!props.length) pnl.innerHTML = '<p class="empty-state">Belum ada data</p>';
+  if (!props.length) pnl.innerHTML = '<p class="empty-state">' + t('chart.noData') + '</p>';
   else {
     const mx = Math.max(...props.map(pr => Math.abs(pp.filter(p=>p.propertyName===pr&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0) - pp.filter(p=>p.propertyName===pr&&p.type==='expense').reduce((s,p)=>s+p.amount,0))),1);
     pnl.innerHTML = props.map(pr => {
@@ -1652,13 +1822,13 @@ function renderOverview() {
   // Transactions
   const sorted = [...pp].sort((a,b)=>new Date(b.dueDate)-new Date(a.dueDate)).slice(0,20);
   const tx = document.getElementById('report-transactions');
-  if (!sorted.length) tx.innerHTML = '<p class="empty-state">Belum ada transaksi</p>';
+  if (!sorted.length) tx.innerHTML = '<p class="empty-state">' + t('tx.none') + '</p>';
   else tx.innerHTML = sorted.map(p => {
     const isE = p.type==='expense';
     const desc = escapeHtml(p.description || (isE ? 'Pengeluaran' : 'Sewa'));
     const propNm = escapeHtml(p.propertyName || '-');
     return `<div class="tx-item"><div class="tx-info"><span class="tx-desc">${isE?'💸':'💰'} ${desc} — ${propNm}</span>
-      <span class="tx-date">${formatDate(p.dueDate)} · ${p.status==='paid'?'Lunas':'Pending'}</span></div>
+      <span class="tx-date">${formatDate(p.dueDate)} · ${p.status==='paid'?t('tx.statusPaid'):t('tx.statusPending')}</span></div>
       <span class="tx-amount ${isE?'expense':'income'}">${isE?'-':'+'}${formatRp(p.amount)}</span></div>`;
   }).join('');
 }
@@ -1730,7 +1900,7 @@ function renderYield() {
   // Comparison table
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan Yield Sewa</h3><p class="yield-cap-table-note"><strong>Gross</strong> &amp; <strong>Net</strong> dari sewa aktual (unit terisi). <strong>Penuh</strong> = net yield jika semua unit terisi pada tarif tertera. Proyeksi nilai aset ada di tab <strong>Proyeksi</strong>.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Gross</th><th>Net</th><th>Penuh</th><th>Payback</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">${t('rpt.yieldCompareTitle')}</h3><p class="yield-cap-table-note">${t('rpt.yieldCompareNote')}</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>${t('rpt.colProperty')}</th><th>${t('rpt.colGross')}</th><th>${t('rpt.colNet')}</th><th>${t('rpt.colFull')}</th><th>${t('rpt.colPayback')}</th></tr></thead><tbody>`;
   }
 
   let cardsHtml = props.map(prop => {
@@ -1771,7 +1941,7 @@ function renderYield() {
     const cashflowAfterCicilan = yearIncome - totalWithCicilan;
     const monthlyCashflow = Math.round(cashflowAfterCicilan / 12);
     const paybackYears = purchasePrice > 0 && netAnnualProfit > 0 ? (purchasePrice / netAnnualProfit).toFixed(1) : '-';
-    const paybackLabel = paybackYears !== '-' ? (paybackYears >= 2 ? paybackYears + ' tahun' : Math.round(paybackYears * 12) + ' bulan') : '-';
+    const paybackLabel = formatPaybackLabel(paybackYears);
 
     // Badge color
     const nv = parseFloat(netYield);
@@ -1785,49 +1955,49 @@ function renderYield() {
     return `<div class="yield-card">
       <div class="yield-card-header">
         <span class="yield-card-name">${escapeHtml(prop)}</span>
-        <span class="yield-card-badge" style="background:${badgeColor}20;color:${badgeColor}">${netYield !== '-' ? 'Sewa net ' + netYield + '%' : 'Belum diisi'}</span>
+        <span class="yield-card-badge" style="background:${badgeColor}20;color:${badgeColor}">${netYield !== '-' ? t('rpt.netRentBadge', { pct: netYield }) : t('rpt.notFilledShort')}</span>
       </div>
-      <div class="yield-section-title">💰 Investasi</div>
-      <div class="yield-row"><span>Harga Beli</span><span style="font-weight:700">${purchasePrice>0?formatRpFull(purchasePrice):'<span style="color:var(--warning-dark)">Belum diisi</span>'}</span></div>
-      <div class="yield-section-title">📈 Pendapatan</div>
-      <div class="yield-row"><span>Sewa Aktual/bln (${occCount} unit)</span><span style="color:var(--success)">${formatRp(monthlyRent)}</span></div>
-      <div class="yield-row"><span>Potensi Sewa/bln (${pu.length} unit)</span><span>${formatRp(potentialRent)}</span></div>
-      <div class="yield-row"><span>Pendapatan Aktual/thn</span><span style="color:var(--success);font-weight:700">${formatRp(yearIncome)}</span></div>
-      <div class="yield-section-title">💸 Pengeluaran Tahunan</div>
+      <div class="yield-section-title">${t('rpt.investmentSection')}</div>
+      <div class="yield-row"><span>${t('rpt.purchasePrice')}</span><span style="font-weight:700">${purchasePrice>0?formatRpFull(purchasePrice):'<span style="color:var(--warning-dark)">' + escapeHtml(t('rpt.notFilledShort')) + '</span>'}</span></div>
+      <div class="yield-section-title">${t('rpt.incomeSection')}</div>
+      <div class="yield-row"><span>${t('rpt.actualRentMo', { n: occCount })}</span><span style="color:var(--success)">${formatRp(monthlyRent)}</span></div>
+      <div class="yield-row"><span>${t('rpt.potentialRentMo', { n: pu.length })}</span><span>${formatRp(potentialRent)}</span></div>
+      <div class="yield-row"><span>${t('rpt.actualIncomeYr')}</span><span style="color:var(--success);font-weight:700">${formatRp(yearIncome)}</span></div>
+      <div class="yield-section-title">${t('rpt.expenseSection')}</div>
       ${fixedCosts > 0 ? `
-        ${pd.pbb ? `<div class="yield-row sub"><span>PBB</span><span>${formatRp(pd.pbb)}</span></div>` : ''}
-        ${pd.maintenance ? `<div class="yield-row sub"><span>Maintenance</span><span>${formatRp(pd.maintenance)}</span></div>` : ''}
-        ${pd.insurance ? `<div class="yield-row sub"><span>Asuransi</span><span>${formatRp(pd.insurance)}</span></div>` : ''}
-        ${pd.otherExpense ? `<div class="yield-row sub"><span>Lain-lain</span><span>${formatRp(pd.otherExpense)}</span></div>` : ''}
+        ${pd.pbb ? `<div class="yield-row sub"><span>${t('rpt.pbb')}</span><span>${formatRp(pd.pbb)}</span></div>` : ''}
+        ${pd.maintenance ? `<div class="yield-row sub"><span>${t('expense.maintenance')}</span><span>${formatRp(pd.maintenance)}</span></div>` : ''}
+        ${pd.insurance ? `<div class="yield-row sub"><span>${t('rpt.insurance')}</span><span>${formatRp(pd.insurance)}</span></div>` : ''}
+        ${pd.otherExpense ? `<div class="yield-row sub"><span>${t('rpt.otherExpense')}</span><span>${formatRp(pd.otherExpense)}</span></div>` : ''}
       ` : ''}
-      ${unitsCost > 0 ? `<div class="yield-row sub"><span>Biaya per-unit (IPL, dll)</span><span>${formatRp(unitsCost)}</span></div>` : ''}
-      ${recordedExpense > 0 ? `<div class="yield-row sub"><span>Operasional (tercatat)</span><span>${formatRp(recordedExpense)}</span></div>` : ''}
-      <div class="yield-row"><span>Total Pengeluaran/thn</span><span style="color:var(--danger);font-weight:700">${formatRp(totalAnnualExpense)}</span></div>
+      ${unitsCost > 0 ? `<div class="yield-row sub"><span>${t('rpt.unitCostsIpl')}</span><span>${formatRp(unitsCost)}</span></div>` : ''}
+      ${recordedExpense > 0 ? `<div class="yield-row sub"><span>${t('rpt.opsRecorded')}</span><span>${formatRp(recordedExpense)}</span></div>` : ''}
+      <div class="yield-row"><span>${t('rpt.totalExpenseYr')}</span><span style="color:var(--danger);font-weight:700">${formatRp(totalAnnualExpense)}</span></div>
       ${cicilanPerBulan > 0 ? `
-        <div class="yield-section-title">🏦 Cicilan Bank</div>
-        <div class="yield-row sub"><span>Angsuran/bulan</span><span style="color:var(--danger)">${formatRp(cicilanPerBulan)}</span></div>
-        <div class="yield-row sub"><span>Angsuran/tahun</span><span style="color:var(--danger)">${formatRp(cicilanPerTahun)}</span></div>
-        ${sisaTenor > 0 ? `<div class="yield-row sub"><span>Sisa tenor</span><span>${sisaTenor > 12 ? Math.floor(sisaTenor/12) + ' thn ' + (sisaTenor%12) + ' bln' : sisaTenor + ' bulan'}</span></div>` : ''}
-        <div class="yield-row"><span>Total + Cicilan/thn</span><span style="color:var(--danger);font-weight:700">${formatRp(totalWithCicilan)}</span></div>
+        <div class="yield-section-title">${t('rpt.bankLoanSection')}</div>
+        <div class="yield-row sub"><span>${t('rpt.installmentMo')}</span><span style="color:var(--danger)">${formatRp(cicilanPerBulan)}</span></div>
+        <div class="yield-row sub"><span>${t('rpt.installmentYr')}</span><span style="color:var(--danger)">${formatRp(cicilanPerTahun)}</span></div>
+        ${sisaTenor > 0 ? `<div class="yield-row sub"><span>${t('rpt.tenorRemain')}</span><span>${formatSisaTenorMonths(sisaTenor)}</span></div>` : ''}
+        <div class="yield-row"><span>${t('rpt.totalPlusInstallmentYr')}</span><span style="color:var(--danger);font-weight:700">${formatRp(totalWithCicilan)}</span></div>
       ` : ''}
       <div class="yield-divider"></div>
-      <div class="yield-section-title">📊 Pilar ke-1: dari sewa (yield)</div>
-      <div class="yield-row highlight"><span>Gross yield sewa</span><span style="font-weight:800">${grossYield !== '-' ? grossYield + '%' : '-'}</span></div>
-      <div class="yield-row highlight"><span>Net yield sewa</span><span style="color:var(--primary);font-weight:800;font-size:16px">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
-      <div class="yield-row highlight"><span>Net yield (100% okupansi)</span><span style="color:${badgeColor};font-weight:800">${effectiveYield !== '-' ? effectiveYield + '%' : '-'}</span></div>
-      <div class="yield-row"><span>Occupancy</span><span>${occRate}% (${occCount}/${pu.length})</span></div>
+      <div class="yield-section-title">${t('rpt.pillar1Yield')}</div>
+      <div class="yield-row highlight"><span>${t('rpt.grossYieldRent')}</span><span style="font-weight:800">${grossYield !== '-' ? grossYield + '%' : '-'}</span></div>
+      <div class="yield-row highlight"><span>${t('rpt.netYieldRent')}</span><span style="color:var(--primary);font-weight:800;font-size:16px">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
+      <div class="yield-row highlight"><span>${t('rpt.netYieldFullOcc')}</span><span style="color:${badgeColor};font-weight:800">${effectiveYield !== '-' ? effectiveYield + '%' : '-'}</span></div>
+      <div class="yield-row"><span>${t('rpt.occupancy')}</span><span>${occRate}% (${occCount}/${pu.length})</span></div>
       <div class="yield-divider"></div>
-      <div class="yield-row highlight"><span>⏱ Payback Period</span><span style="font-weight:800;color:var(--primary)">${paybackLabel}</span></div>
-      <div class="yield-row"><span>Net Profit/thn</span><span style="color:${netAnnualProfit>=0?'var(--success)':'var(--danger)'};font-weight:700">${formatRp(netAnnualProfit)}</span></div>
+      <div class="yield-row highlight"><span>${t('rpt.paybackPeriod')}</span><span style="font-weight:800;color:var(--primary)">${paybackLabel}</span></div>
+      <div class="yield-row"><span>${t('rpt.netProfitYr')}</span><span style="color:${netAnnualProfit>=0?'var(--success)':'var(--danger)'};font-weight:700">${formatRp(netAnnualProfit)}</span></div>
       ${cicilanPerBulan > 0 ? `
         <div class="yield-divider"></div>
-        <div class="yield-section-title">💳 Cashflow Setelah Cicilan</div>
-        <div class="yield-row highlight"><span>Cashflow/bulan</span><span style="color:${monthlyCashflow>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${monthlyCashflow>=0?'+':''}${formatRp(monthlyCashflow)}</span></div>
-        <div class="yield-row highlight"><span>Cashflow/tahun</span><span style="color:${cashflowAfterCicilan>=0?'var(--success)':'var(--danger)'};font-weight:700">${cashflowAfterCicilan>=0?'+':''}${formatRp(cashflowAfterCicilan)}</span></div>
-        <div class="yield-row"><span>Status</span><span style="font-weight:700;color:${monthlyCashflow>=0?'var(--success)':'var(--danger)'}">${monthlyCashflow>=0?'✅ Positif — sewa menutupi cicilan':'⚠️ Negatif — perlu topup '+formatRp(Math.abs(monthlyCashflow))+'/bln'}</span></div>
+        <div class="yield-section-title">${t('rpt.cashflowAfterLoan')}</div>
+        <div class="yield-row highlight"><span>${t('rpt.cashflowMo')}</span><span style="color:${monthlyCashflow>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${monthlyCashflow>=0?'+':''}${formatRp(monthlyCashflow)}</span></div>
+        <div class="yield-row highlight"><span>${t('rpt.cashflowYr')}</span><span style="color:${cashflowAfterCicilan>=0?'var(--success)':'var(--danger)'};font-weight:700">${cashflowAfterCicilan>=0?'+':''}${formatRp(cashflowAfterCicilan)}</span></div>
+        <div class="yield-row"><span>${t('rpt.status')}</span><span style="font-weight:700;color:${monthlyCashflow>=0?'var(--success)':'var(--danger)'}">${monthlyCashflow>=0?t('rpt.positiveLoan'):escapeHtml(t('rpt.negativeLoan', { amt: formatRp(Math.abs(monthlyCashflow)) }))}</span></div>
       ` : ''}
       <div style="margin-top:14px">
-        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">⚙ Atur Investasi & Biaya</button>
+        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">${t('rpt.configureInvest')}</button>
       </div>
     </div>`;
   }).join('');
@@ -1855,32 +2025,32 @@ function renderProyeksi() {
   const framingHtml = '';
 
   const assumptionHtml = `<div class="card">
-    <h3 class="card-title">⚙️ Asumsi</h3>
+    <h3 class="card-title">${t('rpt.projAssumptions')}</h3>
     <div class="form-group">
-      <label class="form-label">Kenaikan harga aset / tahun</label>
+      <label class="form-label">${t('rpt.assetGrowthYr')}</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-cap-pct" step="0.5" min="-30" max="50" class="form-input" style="max-width:120px"
           value="${capPct}"
           onchange="DB.setVal('yield_cap_appreciation_pct', this.value); renderProyeksi()">
-        <span style="font-weight:700;color:var(--primary)">%/thn</span>
+        <span style="font-weight:700;color:var(--primary)">${t('rpt.perYrPct')}</span>
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Jangka waktu proyeksi</label>
+      <label class="form-label">${t('rpt.projectionHorizon')}</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-horizon" step="1" min="1" max="30" class="form-input" style="max-width:120px"
           value="${capYears}"
           onchange="DB.setVal('yield_cap_horizon_years', this.value); renderProyeksi()">
-        <span style="font-weight:700;color:var(--primary)">tahun</span>
+        <span style="font-weight:700;color:var(--primary)">${t('rpt.yearsWord')}</span>
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Kenaikan laba sewa / tahun</label>
+      <label class="form-label">${t('rpt.rentProfitGrowthYr')}</label>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="number" id="proj-esc" step="0.5" min="-15" max="25" class="form-input" style="max-width:120px"
           value="${rentEscPct}"
           onchange="DB.setVal('yield_cap_rent_escalation_pct', this.value); renderProyeksi()">
-        <span style="font-weight:700;color:var(--primary)">%/thn</span>
+        <span style="font-weight:700;color:var(--primary)">${t('rpt.perYrPct')}</span>
       </div>
     </div>
   </div>`;
@@ -1888,7 +2058,7 @@ function renderProyeksi() {
   // Comparison table (multi-property)
   let compHtml = '';
   if (props.length > 1) {
-    compHtml = `<div class="card"><h3 class="card-title">📊 Perbandingan (${capYears} thn)</h3><p class="yield-cap-table-note">Klik baris untuk mengatur asumsi per properti.</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>Properti</th><th>Net Yield</th><th>Apresiasi</th><th>Return/thn</th><th>Kenaikan Nilai</th></tr></thead><tbody>`;
+    compHtml = `<div class="card"><h3 class="card-title">${t('rpt.projCompareTitle', { n: capYears })}</h3><p class="yield-cap-table-note">${t('rpt.projCompareHint')}</p><div class="yield-compare-table"><table class="compare-table"><thead><tr><th>${t('rpt.colProperty')}</th><th>${t('rpt.colNetYield')}</th><th>${t('rpt.colAppreciation')}</th><th>${t('rpt.colReturnYr')}</th><th>${t('rpt.colValueGain')}</th></tr></thead><tbody>`;
   }
 
   const cardsHtml = props.map(prop => {
@@ -1938,49 +2108,49 @@ function renderProyeksi() {
       const combinedEst = capGainAmt + cumRent;
 
       const capOvInputVal = Object.prototype.hasOwnProperty.call(capOverrideMap, prop) ? String(capOverrideMap[prop]) : '';
-      const capOvPh = `Kosong = pakai default (${capPct}%)`.replace(/"/g, '&quot;');
+      const capOvPh = escapeHtml(t('rpt.capOverridePh', { cap: capPct }));
       const rentEscLabel = rentEscPct === 0
-        ? 'tetap tiap tahun'
-        : `naik ${rentEscPct >= 0 ? '+' : ''}${rentEscPct}%/thn`;
+        ? t('rpt.rentFlatEachYear')
+        : t('rpt.rentUpEachYear', { p: (rentEscPct >= 0 ? '+' : '') + rentEscPct });
 
       capGainSection = `
-      <div class="yield-row highlight"><span>Kenaikan harga / tahun</span><span style="font-weight:800;color:var(--text-secondary)">${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%${usesGlobalCap ? '' : ' <span style="font-size:10px;color:var(--text-muted)">(custom)</span>'}</span></div>
-      ${netYNum !== null ? `<div class="yield-row"><span>Estimasi return / tahun</span><span style="font-weight:700;color:var(--primary)">${simpleSumPct}%</span></div>` : ''}
+      <div class="yield-row highlight"><span>${t('rpt.capGrowthYr')}</span><span style="font-weight:800;color:var(--text-secondary)">${propCapEff >= 0 ? '+' : ''}${propCapEff.toFixed(2)}%${usesGlobalCap ? '' : ' <span style="font-size:10px;color:var(--text-muted)">' + escapeHtml(t('rpt.customCapTag')) + '</span>'}</span></div>
+      ${netYNum !== null ? `<div class="yield-row"><span>${t('rpt.estReturnYr')}</span><span style="font-weight:700;color:var(--primary)">${simpleSumPct}%</span></div>` : ''}
       <div class="form-group yield-cap-override">
-        <label class="form-label">Kenaikan harga khusus properti ini</label>
+        <label class="form-label">${t('rpt.capOverrideLabel')}</label>
         <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${capOvPh}"
           value="${capOvInputVal.replace(/"/g, '&quot;')}"
           onchange="setYieldCapOverrideFromYield(${onclickStrArg(prop)}, this.value)">
       </div>
       <div class="yield-divider"></div>
-      <div class="yield-section-title">📆 Proyeksi ${capYears} Tahun</div>
-      <div class="yield-row"><span>Harga beli</span><span style="font-weight:700">${formatRpFull(purchasePrice)}</span></div>
-      <div class="yield-row"><span>Estimasi nilai aset</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
-      <div class="yield-row highlight"><span>Kenaikan nilai (estimasi)</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
-      <div class="yield-row sub"><span>Akumulasi laba sewa (${capYears} thn, ${rentEscLabel})</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
-      <div class="yield-row highlight"><span>Total estimasi keuntungan</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
-      <p class="yield-cap-micro">Kenaikan nilai + akumulasi laba sewa selama ${capYears} tahun — angka kasar, bisa beda di realita.</p>
-      ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">🏦 Ada cicilan KPR — belum diperhitungkan dalam proyeksi ini.</p>` : ''}`;
+      <div class="yield-section-title">${t('rpt.projNYears', { n: capYears })}</div>
+      <div class="yield-row"><span>${t('rpt.purchasePriceLower')}</span><span style="font-weight:700">${formatRpFull(purchasePrice)}</span></div>
+      <div class="yield-row"><span>${t('rpt.estAssetValue')}</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
+      <div class="yield-row highlight"><span>${t('rpt.estValueGain')}</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
+      <div class="yield-row sub"><span>${t('rpt.cumRentNYears', { n: capYears, esc: rentEscLabel })}</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
+      <div class="yield-row highlight"><span>${t('rpt.totalEstGain')}</span><span style="font-weight:800;font-size:15px;color:var(--primary)">${combinedEst >= 0 ? '+' : ''}${formatRpFull(combinedEst)}</span></div>
+      <p class="yield-cap-micro">${t('rpt.projFootnote', { n: capYears })}</p>
+      ${cicilanPerBulan > 0 ? `<p class="yield-cap-micro yield-cap-cicilan">${t('rpt.projHasKprNote')}</p>` : ''}`;
     } else {
       capGainSection = `
       <div class="form-group yield-cap-override">
-        <label class="form-label">Kenaikan harga khusus properti ini</label>
-        <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="Kosong = default (${capPct}%)"
+        <label class="form-label">${t('rpt.capOverrideLabel')}</label>
+        <input type="number" step="0.5" min="-30" max="50" class="form-input" placeholder="${escapeHtml(t('rpt.capOverridePhDefault', { cap: capPct }))}"
           value="${(Object.prototype.hasOwnProperty.call(capOverrideMap, prop) ? String(capOverrideMap[prop]) : '').replace(/"/g, '&quot;')}"
           onchange="setYieldCapOverrideFromYield(${onclickStrArg(prop)}, this.value)">
       </div>
-      <p class="yield-cap-micro">Isi harga beli di pengaturan properti untuk melihat proyeksi lengkap.</p>`;
+      <p class="yield-cap-micro">${t('rpt.fillPurchaseHint')}</p>`;
     }
 
     return `<div class="yield-card">
       <div class="yield-card-header">
         <span class="yield-card-name">${escapeHtml(prop)}</span>
-        <span class="yield-card-badge" style="background:var(--primary-10,#0d948820);color:var(--primary)">${capYears} thn horizon</span>
+        <span class="yield-card-badge" style="background:var(--primary-10,#0d948820);color:var(--primary)">${t('rpt.horizonBadge', { n: capYears })}</span>
       </div>
-      <div class="yield-section-title">📈 Proyeksi Kenaikan Nilai</div>
+      <div class="yield-section-title">${t('rpt.valueAppreciationTitle')}</div>
       ${capGainSection}
       <div style="margin-top:14px">
-        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">⚙ Atur Investasi & Biaya</button>
+        <button class="btn btn-outline" onclick="showPropertySettings(${onclickStrArg(prop)})">${t('rpt.configureInvest')}</button>
       </div>
     </div>`;
   }).join('');
@@ -1994,34 +2164,34 @@ function renderProyeksi() {
 
 // ===== OCCUPANCY ANALYTICS =====
 function renderAnalytics() {
-  const units = getUnits(), payments = getPayments(), tenants = getTenants();
+  const units = getUnits(), tenants = getTenants(), tenantHistory = getTenantHistory();
   const container = document.getElementById('analytics-content');
   const props = [...new Set(units.map(u=>u.property))];
 
-  if (!props.length) { container.innerHTML = '<p class="empty-state">Tambahkan properti terlebih dahulu.</p>'; return; }
+  if (!props.length) { container.innerHTML = '<p class="empty-state">' + t('yield.addPropsFirst') + '</p>'; return; }
 
   // Current occupancy per property
-  let html = '<div class="card"><h3 class="card-title">Occupancy Rate</h3>';
+  let html = '<div class="card"><h3 class="card-title">' + escapeHtml(t('rpt.occupancyRateTitle')) + '</h3>';
   props.forEach(prop => {
     const pu = units.filter(u=>u.property===prop);
     const occ = pu.length>0 ? Math.round(pu.filter(u=>u.status==='occupied').length/pu.length*100) : 0;
-    html += `<div class="analytics-bar-group"><div class="analytics-bar-label"><span>${prop}</span><span style="font-weight:800;color:${occ>=80?'var(--success)':occ>=50?'var(--warning-dark)':'var(--danger)'}">${occ}%</span></div>
+    html += `<div class="analytics-bar-group"><div class="analytics-bar-label"><span>${escapeHtml(prop)}</span><span style="font-weight:800;color:${occ>=80?'var(--success)':occ>=50?'var(--warning-dark)':'var(--danger)'}">${occ}%</span></div>
       <div class="analytics-bar"><div class="analytics-bar-fill" style="width:${occ}%;background:${occ>=80?'var(--gradient-success)':occ>=50?'var(--gradient-warm)':'var(--gradient-danger)'}"></div></div></div>`;
   });
   html += '</div>';
 
-  // Occupancy trend (last 6 months simulation from payment data)
-  html += '<div class="card"><h3 class="card-title">Tren Occupancy (6 Bulan)</h3>';
+  // Tren okupansi dari periode kontrak (sama logika dengan Laporan → Grafik)
+  html += '<div class="card"><h3 class="card-title">' + escapeHtml(t('rpt.occupancyTrendTitle', { n: 6 })) + '</h3>';
+  html += '<p class="yield-cap-micro" style="margin:-4px 0 12px">' + escapeHtml(t('rpt.occupancyTrendHint')) + '</p>';
   const now = new Date();
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: d.toLocaleDateString('id-ID', {month:'short'}), key: getMonthYear(d) });
+    months.push({ label: d.toLocaleDateString(dateLocaleTag(), {month:'short'}), key: getMonthYear(d) });
   }
   const totalUnits = units.length || 1;
   months.forEach(m => {
-    // Count units that had income payments in that month as "occupied"
-    const occupiedCount = new Set(payments.filter(p => p.period === m.key && p.type === 'income').map(p => p.tenantId)).size;
+    const occupiedCount = occupiedUnitsByLeasesAtMonth(units, tenants, tenantHistory, m.key);
     const rate = Math.min(Math.round((occupiedCount / totalUnits) * 100), 100);
     html += `<div class="analytics-bar-group"><div class="analytics-bar-label"><span>${m.label}</span><span>${rate}%</span></div>
       <div class="analytics-bar"><div class="analytics-bar-fill" style="width:${rate}%"></div></div></div>`;
@@ -2029,22 +2199,22 @@ function renderAnalytics() {
   html += '</div>';
 
   // Kontrak akan habis
-  html += '<div class="card"><h3 class="card-title">Prediksi Vacancy</h3>';
+  html += '<div class="card"><h3 class="card-title">' + escapeHtml(t('rpt.leaseExpiryTitle')) + '</h3>';
   const expiring = tenants.filter(t => {
     const d = daysUntil(t.endDate);
     return d >= -30 && d <= 90;
   }).sort((a,b) => new Date(a.endDate) - new Date(b.endDate));
 
-  if (!expiring.length) html += '<p class="empty-state">Tidak ada kontrak yang akan habis dalam 90 hari</p>';
+  if (!expiring.length) html += '<p class="empty-state">' + t('yield.noExpiry') + '</p>';
   else {
-    expiring.forEach(t => {
-      const unit = units.find(u=>u.id===t.unitId);
-      const d = daysUntil(t.endDate);
-      const status = d < 0 ? 'Sudah expired' : d <= 30 ? `${d} hari lagi` : `${d} hari lagi`;
+    expiring.forEach(tenant => {
+      const unit = units.find(u=>u.id===tenant.unitId);
+      const d = daysUntil(tenant.endDate);
+      const status = d < 0 ? t('rpt.expiredStatus') : t('rpt.daysLeft', { d });
       const color = d < 0 ? 'var(--danger)' : d <= 30 ? 'var(--warning-dark)' : 'var(--text-secondary)';
-      html += `<div class="due-item"><div class="due-info"><span class="due-name">${t.name}</span>
-        <span class="due-detail">${unit?unit.property+' — '+unit.name:'-'}</span></div>
-        <span style="font-size:13px;font-weight:700;color:${color}">${status}</span></div>`;
+      html += `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(tenant.name)}</span>
+        <span class="due-detail">${unit?escapeHtml(unit.property+' — '+unit.name):'-'}</span></div>
+        <span style="font-size:13px;font-weight:700;color:${color}">${escapeHtml(status)}</span></div>`;
     });
   }
   html += '</div>';
@@ -2058,7 +2228,7 @@ function renderMultiProperty() {
   const props = [...new Set(units.map(u=>u.property))];
   const container = document.getElementById('multi-content');
 
-  if (!props.length) { container.innerHTML = '<p class="empty-state">Belum ada properti.</p>'; return; }
+  if (!props.length) { container.innerHTML = '<p class="empty-state">' + t('yield.noProps') + '</p>'; return; }
 
   const cm = getMonthYear();
   container.innerHTML = props.map(prop => {
@@ -2082,32 +2252,35 @@ function renderMultiProperty() {
     const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(1) : '-';
     const netProfit = yearIncome - totalAnnualExpense;
     const paybackYears = purchasePrice > 0 && netProfit > 0 ? (purchasePrice / netProfit).toFixed(1) : '-';
-    const paybackLabel = paybackYears !== '-' ? (paybackYears >= 2 ? paybackYears + ' thn' : Math.round(paybackYears * 12) + ' bln') : '-';
+    const paybackLabel = formatPaybackLabel(paybackYears);
     const propTenants = tenants.filter(t => pu.some(u=>u.id===t.unitId));
     const overdueCount = payments.filter(p=>p.propertyName===prop&&p.status==='overdue').length;
     const type = pu[0]?.type || 'kos';
     const icons = { kos:'🏠', apartemen:'🏢', rumah:'🏡', ruko:'🏪', kantor:'🏛' };
+    const typeTk = 'form.type.' + type;
+    let typeLabel = t(typeTk);
+    if (typeLabel === typeTk) typeLabel = type;
 
     return `<div class="mp-card" onclick="showPropertySettings(${onclickStrArg(prop)})">
       <div class="mp-card-header">
         <span class="mp-card-name">${icons[type]||'🏠'} ${escapeHtml(prop)}</span>
-        <span class="mp-card-type">${type} · ${pu.length} unit</span>
+        <span class="mp-card-type">${escapeHtml(typeLabel)} · ${t('rpt.nUnits', { n: pu.length })}</span>
       </div>
       <div class="mp-stats">
-        <div class="mp-stat"><span class="mp-stat-value" style="color:${occRate>=80?'var(--success)':occRate>=50?'var(--warning-dark)':'var(--danger)'}">${occRate}%</span><span class="mp-stat-label">Occupancy</span></div>
-        <div class="mp-stat"><span class="mp-stat-value" style="color:var(--success)">${formatRp(monthInc)}</span><span class="mp-stat-label">Income/bln</span></div>
-        <div class="mp-stat"><span class="mp-stat-value" style="color:${net>=0?'var(--success)':'var(--danger)'}">${formatRp(net)}</span><span class="mp-stat-label">Net/bln</span></div>
+        <div class="mp-stat"><span class="mp-stat-value" style="color:${occRate>=80?'var(--success)':occRate>=50?'var(--warning-dark)':'var(--danger)'}">${occRate}%</span><span class="mp-stat-label">${t('rpt.occupancy')}</span></div>
+        <div class="mp-stat"><span class="mp-stat-value" style="color:var(--success)">${formatRp(monthInc)}</span><span class="mp-stat-label">${t('rpt.incomePerMo')}</span></div>
+        <div class="mp-stat"><span class="mp-stat-value" style="color:${net>=0?'var(--success)':'var(--danger)'}">${formatRp(net)}</span><span class="mp-stat-label">${t('rpt.netPerMo')}</span></div>
       </div>
       <div class="mp-yield-row">
-        <div class="mp-yield-item"><span class="mp-yield-label">Yield sewa</span><span class="mp-yield-value" style="color:var(--primary)">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
-        <div class="mp-yield-item"><span class="mp-yield-label">Payback</span><span class="mp-yield-value">${paybackLabel}</span></div>
-        <div class="mp-yield-item"><span class="mp-yield-label">Investasi</span><span class="mp-yield-value">${purchasePrice > 0 ? formatRp(purchasePrice) : '-'}</span></div>
+        <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.rentalYield')}</span><span class="mp-yield-value" style="color:var(--primary)">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
+        <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.payback')}</span><span class="mp-yield-value">${paybackLabel}</span></div>
+        <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.investasiShort')}</span><span class="mp-yield-value">${purchasePrice > 0 ? formatRp(purchasePrice) : '-'}</span></div>
       </div>
       <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-secondary)">
-        <span>🏷 Potensi: ${formatRp(potentialRent)}/bln</span>
-        <span>👥 ${propTenants.length} penyewa</span>
-        <span>🔴 ${vacCount} kosong</span>
-        ${overdueCount?`<span style="color:var(--danger)">⚠ ${overdueCount} nunggak</span>`:''}
+        <span>${t('rpt.potentialPerMo', { v: formatRp(potentialRent) })}</span>
+        <span>${t('rpt.tenantsCount', { n: propTenants.length })}</span>
+        <span>${t('rpt.vacantCount', { n: vacCount })}</span>
+        ${overdueCount?`<span style="color:var(--danger)">${t('rpt.overdueCount', { n: overdueCount })}</span>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2135,67 +2308,67 @@ function renderKPRSimulator() {
 
   container.innerHTML = `
     <div class="card">
-      <h3 class="card-title">🏦 Simulasi KPR</h3>
-      <small style="color:var(--text-muted);display:block;margin-bottom:16px">Hitung angsuran dan total biaya KPR. Semua angka bisa diedit.</small>
+      <h3 class="card-title">${escapeHtml(t('kpr.title'))}</h3>
+      <small style="color:var(--text-muted);display:block;margin-bottom:16px">${escapeHtml(t('kpr.subtitle'))}</small>
 
-      ${props.length > 0 ? `<div class="form-group"><label class="form-label">Pilih Properti (opsional)</label>
+      ${props.length > 0 ? `<div class="form-group"><label class="form-label">${escapeHtml(t('kpr.selectProperty'))}</label>
         <select class="form-select" id="kpr-property" onchange="kprSelectProperty(this.value)">
-          <option value="">Custom / Manual</option>
+          <option value="">${escapeHtml(t('kpr.customManual'))}</option>
           ${props.map(p => {
             const pd = getPropertyData(p);
             return `<option value="${escapeHtml(p)}" ${d.selectedProperty === p ? 'selected' : ''}>${escapeHtml(p)}${pd.purchasePrice ? ' — ' + formatRp(pd.purchasePrice) : ''}</option>`;
           }).join('')}
         </select></div>` : ''}
 
-      <div class="kpr-section-title">💰 Harga & DP</div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.priceDp'))}</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Harga Properti</label><input type="text" inputmode="numeric" data-rp id="kpr-harga" value="${formatNumDots(d.hargaProperti)}" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>DP (%)</label><input type="number" id="kpr-dp" value="${d.dp}" step="5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.propertyPrice'))}</label><input type="text" inputmode="numeric" data-rp id="kpr-harga" value="${formatNumDots(d.hargaProperti)}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.dpPct'))}</label><input type="number" id="kpr-dp" value="${d.dp}" step="5" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Tenor (tahun)</label><input type="number" id="kpr-tenor" value="${d.tenor}" oninput="calcKPR()"></div>
-      </div>
-
-      <div class="kpr-section-title">📊 Suku Bunga</div>
-      <div class="kpr-row">
-        <div class="kpr-field"><label>Bunga Fixed (%/thn)</label><input type="number" id="kpr-fixed-rate" value="${d.fixedRate}" step="0.1" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Periode Fixed (thn)</label><input type="number" id="kpr-fixed-years" value="${d.fixedYears}" oninput="calcKPR()"></div>
-      </div>
-      <div class="kpr-row">
-        <div class="kpr-field"><label>Bunga Floating (%/thn)</label><input type="number" id="kpr-floating-rate" value="${d.floatingRate}" step="0.1" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.tenorYears'))}</label><input type="number" id="kpr-tenor" value="${d.tenor}" oninput="calcKPR()"></div>
       </div>
 
-      <div class="kpr-section-title">🧾 Biaya Akad (One-Time)</div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.rateSection'))}</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Provisi (%)</label><input type="number" id="kpr-provisi" value="${d.provisi}" step="0.1" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Admin (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-admin" value="${formatNumDots(d.adminFee)}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.fixedRate'))}</label><input type="number" id="kpr-fixed-rate" value="${d.fixedRate}" step="0.1" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.fixedPeriodYr'))}</label><input type="number" id="kpr-fixed-years" value="${d.fixedYears}" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Appraisal (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-appraisal" value="${formatNumDots(d.appraisal)}" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Notaris (%)</label><input type="number" id="kpr-notaris" value="${d.notaris}" step="0.1" oninput="calcKPR()"></div>
-      </div>
-      <div class="kpr-row">
-        <div class="kpr-field"><label>BPHTB (%)</label><input type="number" id="kpr-bphtb" value="${d.bphtbRate}" step="0.5" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>NJOPTKP (Rp)</label><input type="text" inputmode="numeric" data-rp id="kpr-njoptkp" value="${formatNumDots(d.njoptkp)}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.floatingRate'))}</label><input type="number" id="kpr-floating-rate" value="${d.floatingRate}" step="0.1" oninput="calcKPR()"></div>
       </div>
 
-      <div class="kpr-section-title">🛡 Asuransi (% / tahun)</div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.closingCosts'))}</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Asuransi Jiwa (%)</label><input type="number" id="kpr-as-jiwa" value="${d.asuransiJiwa}" step="0.01" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>As. Kebakaran (%)</label><input type="number" id="kpr-as-kebakaran" value="${d.asuransiKebakaran}" step="0.01" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.provisi'))}</label><input type="number" id="kpr-provisi" value="${d.provisi}" step="0.1" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.admin'))}</label><input type="text" inputmode="numeric" data-rp id="kpr-admin" value="${formatNumDots(d.adminFee)}" oninput="calcKPR()"></div>
+      </div>
+      <div class="kpr-row">
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.appraisal'))}</label><input type="text" inputmode="numeric" data-rp id="kpr-appraisal" value="${formatNumDots(d.appraisal)}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.notarisPct'))}</label><input type="number" id="kpr-notaris" value="${d.notaris}" step="0.1" oninput="calcKPR()"></div>
+      </div>
+      <div class="kpr-row">
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.bphtb'))}</label><input type="number" id="kpr-bphtb" value="${d.bphtbRate}" step="0.5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.njoptkp'))}</label><input type="text" inputmode="numeric" data-rp id="kpr-njoptkp" value="${formatNumDots(d.njoptkp)}" oninput="calcKPR()"></div>
       </div>
 
-      <div class="kpr-section-title">📈 Proyeksi Kenaikan Sewa</div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.insuranceSection'))}</div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Sewa saat ini (Rp/bln)</label><input type="text" inputmode="numeric" data-rp id="kpr-sewa-awal" value="${formatNumDots(d.sewaAwal)}" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Naik tiap (tahun)</label><input type="number" id="kpr-rent-freq" value="${d.rentFreq}" min="1" max="5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.lifeIns'))}</label><input type="number" id="kpr-as-jiwa" value="${d.asuransiJiwa}" step="0.01" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.fireIns'))}</label><input type="number" id="kpr-as-kebakaran" value="${d.asuransiKebakaran}" step="0.01" oninput="calcKPR()"></div>
+      </div>
+
+      <div class="kpr-section-title">${escapeHtml(t('kpr.rentEscalationSection'))}</div>
+      <div class="kpr-row">
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.rentNow'))}</label><input type="text" inputmode="numeric" data-rp id="kpr-sewa-awal" value="${formatNumDots(d.sewaAwal)}" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.rentStepYears'))}</label><input type="number" id="kpr-rent-freq" value="${d.rentFreq}" min="1" max="5" oninput="calcKPR()"></div>
       </div>
       <div class="kpr-row">
-        <div class="kpr-field"><label>Konservatif (%)</label><input type="number" id="kpr-rent-low" value="${d.rentConservative}" step="0.5" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Moderat (%)</label><input type="number" id="kpr-rent-mid" value="${d.rentModerate}" step="0.5" oninput="calcKPR()"></div>
-        <div class="kpr-field"><label>Optimistik (%)</label><input type="number" id="kpr-rent-high" value="${d.rentOptimistic}" step="0.5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.scenarioLow'))}</label><input type="number" id="kpr-rent-low" value="${d.rentConservative}" step="0.5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.scenarioMid'))}</label><input type="number" id="kpr-rent-mid" value="${d.rentModerate}" step="0.5" oninput="calcKPR()"></div>
+        <div class="kpr-field"><label>${escapeHtml(t('kpr.scenarioHigh'))}</label><input type="number" id="kpr-rent-high" value="${d.rentOptimistic}" step="0.5" oninput="calcKPR()"></div>
       </div>
-      <small style="color:var(--text-muted);display:block;margin-top:4px;padding:0 4px">Sewa naik setiap N tahun. 3 skenario dihitung bersamaan.</small>
+      <small style="color:var(--text-muted);display:block;margin-top:4px;padding:0 4px">${escapeHtml(t('kpr.rentStepHint'))}</small>
     </div>
 
     <div id="kpr-results"></div>
@@ -2240,9 +2413,9 @@ function kprSelectProperty(propName) {
 
   // Show auto-fill summary
   const parts = [];
-  if (pd.purchasePrice) parts.push('harga beli');
-  if (potentialRent > 0) parts.push(`sewa ${formatRp(potentialRent)}/bln dari ${propUnits.length} unit`);
-  if (parts.length) showToast(`Data ${propName} diisi: ${parts.join(', ')}`, 'info', 3000);
+  if (pd.purchasePrice) parts.push(t('kpr.partPurchase'));
+  if (potentialRent > 0) parts.push(t('kpr.partRentUnits', { rent: formatRp(potentialRent), n: propUnits.length }));
+  if (parts.length) showToast(t('msg.propPrefill', { name: propName, parts: parts.join(', ') }), 'info', 3000);
 
   // Render unit breakdown under the property selector
   renderKPRUnitBreakdown(propName, propUnits, pd);
@@ -2271,18 +2444,18 @@ function renderKPRUnitBreakdown(propName, units, pd) {
 
   el.innerHTML = `
     <div style="background:var(--bg);border-radius:var(--radius-xs);padding:14px;margin-top:12px;margin-bottom:12px;border-left:4px solid var(--primary)">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">📋 Data Real — ${propName}</div>
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">${escapeHtml(t('kpr.realDataTitle', { name: propName }))}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
         <div style="background:var(--bg-card);padding:8px 10px;border-radius:8px;text-align:center">
           <div style="font-size:16px;font-weight:800;color:var(--success)">${formatRp(actualMonthlyRent)}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-weight:600">SEWA AKTUAL/BLN</div>
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">${escapeHtml(t('kpr.sewaAktualBln'))}</div>
         </div>
         <div style="background:var(--bg-card);padding:8px 10px;border-radius:8px;text-align:center">
           <div style="font-size:16px;font-weight:800;color:var(--primary)">${formatRp(totalMonthlyRent)}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-weight:600">POTENSI/BLN</div>
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">${escapeHtml(t('kpr.potensiBln'))}</div>
         </div>
       </div>
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Detail per Unit</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">${escapeHtml(t('kpr.detailPerUnit'))}</div>
       ${units.map(u => {
         const rent = getUnitMonthlyRent(u);
         const cost = getUnitMonthlyCost(u);
@@ -2290,24 +2463,24 @@ function renderKPRUnitBreakdown(propName, units, pd) {
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
           <span style="display:flex;align-items:center;gap:6px">
             <span style="width:8px;height:8px;border-radius:50%;background:${isOcc ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0"></span>
-            <span style="font-weight:600;color:var(--text)">${u.name}</span>
+            <span style="font-weight:600;color:var(--text)">${escapeHtml(u.name)}</span>
           </span>
           <span>
-            <span style="font-weight:700;color:${isOcc ? 'var(--success)' : 'var(--text-muted)'}">${formatRp(rent)}/bln</span>
+            <span style="font-weight:700;color:${isOcc ? 'var(--success)' : 'var(--text-muted)'}">${formatRp(rent)}${escapeHtml(t('kpr.perMoSuffix'))}</span>
             ${cost > 0 ? `<span style="color:var(--danger);font-size:11px;margin-left:4px">-${formatRp(cost)}</span>` : ''}
           </span>
         </div>`;
       }).join('')}
       ${(totalMonthlyCost > 0 || propMonthlyCost > 0) ? `
         <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
-          ${totalMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>Biaya unit/bln</span><span style="font-weight:700">-${formatRp(Math.round(totalMonthlyCost))}</span></div>` : ''}
-          ${propMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>Biaya properti/bln</span><span style="font-weight:700">-${formatRp(Math.round(propMonthlyCost))}</span></div>` : ''}
+          ${totalMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>${escapeHtml(t('kpr.unitCostMo'))}</span><span style="font-weight:700">-${formatRp(Math.round(totalMonthlyCost))}</span></div>` : ''}
+          ${propMonthlyCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);padding:2px 0"><span>${escapeHtml(t('kpr.propCostMo'))}</span><span style="font-weight:700">-${formatRp(Math.round(propMonthlyCost))}</span></div>` : ''}
           <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding:4px 0;color:${(actualMonthlyRent - totalMonthlyCost - propMonthlyCost) >= 0 ? 'var(--success)' : 'var(--danger)'}">
-            <span>Net sewa aktual/bln</span><span>${formatRp(Math.round(actualMonthlyRent - totalMonthlyCost - propMonthlyCost))}</span>
+            <span>${escapeHtml(t('kpr.netActualMo'))}</span><span>${formatRp(Math.round(actualMonthlyRent - totalMonthlyCost - propMonthlyCost))}</span>
           </div>
         </div>` : ''}
       <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
-        ${occupiedUnits.length}/${units.length} terisi · Occupancy ${units.length > 0 ? Math.round(occupiedUnits.length/units.length*100) : 0}%
+        ${t('kpr.occSummary', { occ: occupiedUnits.length, total: units.length, pct: units.length > 0 ? Math.round(occupiedUnits.length/units.length*100) : 0 })}
       </div>
     </div>`;
 }
@@ -2404,19 +2577,19 @@ function calcKPR() {
 
     overlayHtml = `
       <div class="card kpr-overlay-card">
-        <h3 class="card-title">📊 Overlay — ${selectedProp}</h3>
-        <div class="yield-row"><span>Sewa aktual/bln</span><span style="color:var(--success);font-weight:700">${formatRp(monthlyRent)}</span></div>
-        <div class="yield-row"><span>Potensi sewa/bln</span><span>${formatRp(potentialRent)}</span></div>
+        <h3 class="card-title">${escapeHtml(t('kpr.overlayTitle', { name: selectedProp }))}</h3>
+        <div class="yield-row"><span>${escapeHtml(t('kpr.actualRentMo'))}</span><span style="color:var(--success);font-weight:700">${formatRp(monthlyRent)}</span></div>
+        <div class="yield-row"><span>${escapeHtml(t('kpr.potentialRentMo'))}</span><span>${formatRp(potentialRent)}</span></div>
         <div class="yield-divider"></div>
-        <div class="yield-row"><span>Cicilan Fixed + Asuransi/bln</span><span style="color:var(--danger)">${formatRp(Math.round(totalMonthlyOut))}</span></div>
-        <div class="yield-row highlight"><span>Cashflow (Fixed)</span><span style="color:${cashflowFixed>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${cashflowFixed>=0?'+':''}${formatRp(Math.round(cashflowFixed))}/bln</span></div>
+        <div class="yield-row"><span>${escapeHtml(t('kpr.fixedPlusInsMo'))}</span><span style="color:var(--danger)">${formatRp(Math.round(totalMonthlyOut))}</span></div>
+        <div class="yield-row highlight"><span>${escapeHtml(t('kpr.cashflowFixed'))}</span><span style="color:${cashflowFixed>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${cashflowFixed>=0?'+':''}${formatRp(Math.round(cashflowFixed))}${escapeHtml(t('kpr.perMoSuffix'))}</span></div>
         ${floatingMonths > 0 ? `
           <div class="yield-divider"></div>
-          <div class="yield-row"><span>Cicilan Floating + Asuransi/bln</span><span style="color:var(--danger)">${formatRp(Math.round(totalMonthlyOutFloat))}</span></div>
-          <div class="yield-row highlight"><span>Cashflow (Floating)</span><span style="color:${cashflowFloating>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${cashflowFloating>=0?'+':''}${formatRp(Math.round(cashflowFloating))}/bln</span></div>
+          <div class="yield-row"><span>${escapeHtml(t('kpr.floatPlusInsMo'))}</span><span style="color:var(--danger)">${formatRp(Math.round(totalMonthlyOutFloat))}</span></div>
+          <div class="yield-row highlight"><span>${escapeHtml(t('kpr.cashflowFloat'))}</span><span style="color:${cashflowFloating>=0?'var(--success)':'var(--danger)'};font-weight:800;font-size:16px">${cashflowFloating>=0?'+':''}${formatRp(Math.round(cashflowFloating))}${escapeHtml(t('kpr.perMoSuffix'))}</span></div>
         ` : ''}
         <div class="yield-divider"></div>
-        <div class="yield-row"><span>Verdict</span><span style="font-weight:800;color:${cashflowFixed>=0?'var(--success)':'var(--danger)'}">${cashflowFixed>=0?'✅ Sewa menutupi cicilan':'⚠️ Perlu topup '+formatRp(Math.abs(Math.round(cashflowFixed)))+'/bln'}</span></div>
+        <div class="yield-row"><span>${escapeHtml(t('kpr.verdict'))}</span><span style="font-weight:800;color:${cashflowFixed>=0?'var(--success)':'var(--danger)'}">${cashflowFixed>=0?escapeHtml(t('kpr.coversLoan')):escapeHtml(t('kpr.needTopup', { amt: formatRp(Math.abs(Math.round(cashflowFixed))) }))}</span></div>
       </div>`;
   }
 
@@ -2441,18 +2614,18 @@ function calcKPR() {
 
   const amortHtml = `<div class="card">
     <h3 class="card-title" onclick="document.getElementById('amort-table').classList.toggle('collapsed')" style="cursor:pointer">
-      📅 Jadwal Amortisasi Per Tahun <span style="font-size:12px;color:var(--text-muted)">(tap untuk buka/tutup)</span>
+      ${escapeHtml(t('kpr.amortTitle'))} <span style="font-size:12px;color:var(--text-muted)">${escapeHtml(t('kpr.tapToggle'))}</span>
     </h3>
     <div id="amort-table" class="collapsed">
       <div class="yield-compare-table"><table class="compare-table amort">
-        <thead><tr><th>Thn</th><th>Rate</th><th>Cicilan/bln</th><th>Pokok/thn</th><th>Bunga/thn</th><th>Sisa</th></tr></thead>
+        <thead><tr><th>${escapeHtml(t('kpr.amortColYr'))}</th><th>${escapeHtml(t('kpr.amortColRate'))}</th><th>${escapeHtml(t('kpr.amortColInstMo'))}</th><th>${escapeHtml(t('kpr.amortColPrinYr'))}</th><th>${escapeHtml(t('kpr.amortColIntYr'))}</th><th>${escapeHtml(t('kpr.amortColBal'))}</th></tr></thead>
         <tbody>${amortRows.map(r => `<tr class="${r.isFixed?'':'amort-floating'}">
           <td>${r.yr}</td><td>${r.rate}%${r.isFixed?' ★':''}</td><td>${formatRp(r.monthly)}</td>
           <td>${formatRp(r.principal)}</td><td style="color:var(--danger)">${formatRp(r.interest)}</td>
           <td style="font-weight:700">${formatRp(r.balance)}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-      <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">★ = Periode fixed rate</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">${escapeHtml(t('kpr.amortFixedStar'))}</div>
     </div>
   </div>`;
 
@@ -2466,9 +2639,9 @@ function calcKPR() {
   let rentProjectionHtml = '';
   if (sewaAwal > 0) {
     const scenarios = [
-      { label: 'Konservatif', pct: rentLow, color: '#d97706', icon: '🐢' },
-      { label: 'Moderat', pct: rentMid, color: '#0d9488', icon: '📊' },
-      { label: 'Optimistik', pct: rentHigh, color: '#7c3aed', icon: '🚀' }
+      { label: t('kpr.scenarioConservative'), pct: rentLow, color: '#d97706', icon: '🐢' },
+      { label: t('kpr.scenarioModerate'), pct: rentMid, color: '#0d9488', icon: '📊' },
+      { label: t('kpr.scenarioOptimistic'), pct: rentHigh, color: '#7c3aed', icon: '🚀' }
     ];
 
     // Build projection rows per scenario
@@ -2502,21 +2675,21 @@ function calcKPR() {
     const summaryCards = projections.map(p => {
       const netCum = p.totalRent - p.totalCicilan;
       return `<div class="rent-scenario-card" style="border-left:4px solid ${p.color}">
-        <div style="font-weight:800;font-size:13px;color:${p.color};margin-bottom:8px">${p.icon} ${p.label} (${p.pct}%/${rentFreq}thn)</div>
-        <div class="yield-row sub"><span>Sewa awal</span><span>${formatRp(sewaAwal)}/bln</span></div>
-        <div class="yield-row sub"><span>Sewa tahun ke-${tenor}</span><span style="font-weight:700;color:var(--success)">${formatRp(p.finalRent)}/bln</span></div>
-        <div class="yield-row sub"><span>Kenaikan total</span><span style="font-weight:700">${((p.finalRent / sewaAwal - 1) * 100).toFixed(0)}%</span></div>
+        <div style="font-weight:800;font-size:13px;color:${p.color};margin-bottom:8px">${p.icon} ${escapeHtml(p.label)} ${escapeHtml(t('kpr.pctPerNYears', { pct: p.pct, n: rentFreq }))}</div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.rentStart'))}</span><span>${formatRp(sewaAwal)}${escapeHtml(t('kpr.perMoSuffix'))}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.rentYearN', { n: tenor }))}</span><span style="font-weight:700;color:var(--success)">${formatRp(p.finalRent)}${escapeHtml(t('kpr.perMoSuffix'))}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.totalIncrease'))}</span><span style="font-weight:700">${((p.finalRent / sewaAwal - 1) * 100).toFixed(0)}%</span></div>
         <div class="yield-divider"></div>
-        <div class="yield-row sub"><span>Total sewa ${tenor} thn</span><span style="color:var(--success);font-weight:700">${formatRp(p.totalRent)}</span></div>
-        <div class="yield-row sub"><span>Total cicilan+asuransi</span><span style="color:var(--danger);font-weight:700">${formatRp(p.totalCicilan)}</span></div>
-        <div class="yield-row sub"><span>Modal awal (DP+akad)</span><span style="color:var(--danger);font-weight:700">${formatRp(Math.round(totalOneTime))}</span></div>
-        <div class="yield-row highlight"><span>Net kumulatif</span><span style="font-weight:800;font-size:15px;color:${netCum>=0?'var(--success)':'var(--danger)'}">${netCum>=0?'+':''}${formatRp(netCum)}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.totalRentNYears', { n: tenor }))}</span><span style="color:var(--success);font-weight:700">${formatRp(p.totalRent)}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.totalInstallIns'))}</span><span style="color:var(--danger);font-weight:700">${formatRp(p.totalCicilan)}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.initialOutlay'))}</span><span style="color:var(--danger);font-weight:700">${formatRp(Math.round(totalOneTime))}</span></div>
+        <div class="yield-row highlight"><span>${escapeHtml(t('kpr.netCumulative'))}</span><span style="font-weight:800;font-size:15px;color:${netCum>=0?'var(--success)':'var(--danger)'}">${netCum>=0?'+':''}${formatRp(netCum)}</span></div>
         <div class="yield-divider"></div>
         <div class="yield-divider"></div>
-        <div class="yield-row sub"><span>📅 Cashflow positif</span><span style="font-weight:700;color:${p.color}">${p.cashflowBreakeven ? 'Tahun ke-' + p.cashflowBreakeven : '❌ Tidak tercapai'}</span></div>
-        <div class="yield-row sub"><span>💰 Balik modal (DP+akad)</span><span style="font-weight:700;color:${p.color}">${p.investBreakeven ? 'Tahun ke-' + p.investBreakeven : '❌ Belum dalam ' + tenor + ' thn'}</span></div>
-        <div class="yield-row highlight"><span>🏆 Lunas total</span><span style="font-weight:800;font-size:14px;color:${p.color}">${p.fullPaybackYear ? 'Tahun ke-' + p.fullPaybackYear : '❌ Belum dalam ' + tenor + ' thn'}</span></div>
-        <small style="color:var(--text-muted);font-size:10px;display:block;margin-top:4px">Lunas = sewa kumulatif ≥ ${formatRp(Math.round(totalCostOwnership))} (DP+akad+cicilan+asuransi)</small>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.cfPositive'))}</span><span style="font-weight:700;color:${p.color}">${p.cashflowBreakeven ? escapeHtml(t('kpr.yearReached', { n: p.cashflowBreakeven })) : escapeHtml(t('kpr.notReached'))}</span></div>
+        <div class="yield-row sub"><span>${escapeHtml(t('kpr.roiDp'))}</span><span style="font-weight:700;color:${p.color}">${p.investBreakeven ? escapeHtml(t('kpr.yearReached', { n: p.investBreakeven })) : escapeHtml(t('kpr.notWithinYears', { n: tenor }))}</span></div>
+        <div class="yield-row highlight"><span>${escapeHtml(t('kpr.paidOffTotal'))}</span><span style="font-weight:800;font-size:14px;color:${p.color}">${p.fullPaybackYear ? escapeHtml(t('kpr.yearReached', { n: p.fullPaybackYear })) : escapeHtml(t('kpr.notWithinYears', { n: tenor }))}</span></div>
+        <small style="color:var(--text-muted);font-size:10px;display:block;margin-top:4px">${escapeHtml(t('kpr.paidOffHint', { amt: formatRp(Math.round(totalCostOwnership)) }))}</small>
       </div>`;
     }).join('');
 
@@ -2542,7 +2715,7 @@ function calcKPR() {
       const pct = Math.abs(r.cumNetCashflow) / maxAbsCum * 100;
       const isPositive = r.cumNetCashflow >= 0;
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px">
-        <span style="width:32px;text-align:right;color:var(--text-muted)">Thn ${r.yr}</span>
+        <span style="width:32px;text-align:right;color:var(--text-muted)">${escapeHtml(t('kpr.yearLabel', { n: r.yr }))}</span>
         <div style="flex:1;height:14px;background:var(--border);border-radius:7px;overflow:hidden;position:relative">
           <div style="width:${Math.min(pct,100)}%;height:100%;background:${isPositive?'var(--success)':'var(--danger)'};border-radius:7px;transition:width 0.3s"></div>
         </div>
@@ -2550,31 +2723,32 @@ function calcKPR() {
       </div>`;
     }).join('');
 
+    const rentStepHint = rentFreq === 1 ? t('kpr.rentEveryYear') : t('kpr.rentEveryNYears', { n: rentFreq });
     rentProjectionHtml = `
       <div class="card">
-        <h3 class="card-title">📈 Proyeksi Sewa vs Cicilan</h3>
-        <small style="color:var(--text-muted);display:block;margin-bottom:16px">Sewa naik ${rentFreq === 1 ? 'tiap tahun' : `tiap ${rentFreq} tahun`} · 3 skenario</small>
+        <h3 class="card-title">${escapeHtml(t('kpr.rentVsMortgageTitle'))}</h3>
+        <small style="color:var(--text-muted);display:block;margin-bottom:16px">${escapeHtml(t('kpr.rentStepSummary', { hint: rentStepHint }))}</small>
         <div class="rent-scenarios">${summaryCards}</div>
       </div>
 
       <div class="card">
-        <h3 class="card-title">📊 Balik Modal — Moderat (${rentMid}%)</h3>
-        <small style="color:var(--text-muted);display:block;margin-bottom:12px">Hijau = sudah balik modal · Merah = belum balik modal (termasuk DP + biaya akad)</small>
+        <h3 class="card-title">${escapeHtml(t('kpr.paybackModerateTitle', { pct: rentMid }))}</h3>
+        <small style="color:var(--text-muted);display:block;margin-bottom:12px">${escapeHtml(t('kpr.paybackBarHint'))}</small>
         ${barChart}
       </div>
 
       <div class="card">
         <h3 class="card-title" onclick="document.getElementById('rent-detail-table').classList.toggle('collapsed')" style="cursor:pointer">
-          📋 Detail Per Tahun <span style="font-size:12px;color:var(--text-muted)">(tap buka/tutup)</span>
+          ${escapeHtml(t('kpr.detailPerYear'))} <span style="font-size:12px;color:var(--text-muted)">${escapeHtml(t('kpr.tapOpenClose'))}</span>
         </h3>
         <div id="rent-detail-table" class="collapsed">
           <div class="yield-compare-table"><table class="compare-table amort">
             <thead><tr>
-              <th>Thn</th><th>Cicilan/bln</th>
-              <th style="color:#d97706">Konser.</th>
-              <th style="color:#0d9488">Moder.</th>
-              <th style="color:#7c3aed">Optim.</th>
-              <th>CF Mod.</th>
+              <th>${escapeHtml(t('kpr.thYear'))}</th><th>${escapeHtml(t('kpr.thInstMo'))}</th>
+              <th style="color:#d97706">${escapeHtml(t('kpr.thCon'))}</th>
+              <th style="color:#0d9488">${escapeHtml(t('kpr.thMod'))}</th>
+              <th style="color:#7c3aed">${escapeHtml(t('kpr.thOpt'))}</th>
+              <th>${escapeHtml(t('kpr.thCfMod'))}</th>
             </tr></thead>
             <tbody>${detailRows.join('')}</tbody>
           </table></div>
@@ -2586,46 +2760,52 @@ function calcKPR() {
   let saveBtn = '';
   if (selectedProp) {
     saveBtn = `<div class="card" style="text-align:center;padding:16px">
-      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Simpan hasil simulasi ke pengaturan properti?</p>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${escapeHtml(t('kpr.savePrompt'))}</p>
       <button class="btn btn-primary" onclick="saveKPRToProperty(${onclickStrArg(selectedProp)}, ${Math.round(monthlyFixed)}, ${totalMonths})">
-        📥 Simpan Cicilan ke ${escapeHtml(selectedProp)}
+        ${escapeHtml(t('kpr.saveBtn', { name: selectedProp }))}
       </button>
-      <small style="display:block;margin-top:8px;color:var(--text-muted)">Cicilan ${formatRpFull(Math.round(monthlyFixed))}/bln · ${totalMonths} bulan akan disimpan</small>
+      <small style="display:block;margin-top:8px;color:var(--text-muted)">${escapeHtml(t('kpr.saveHint', { cicilan: formatRpFull(Math.round(monthlyFixed)), n: totalMonths }))}</small>
     </div>`;
   }
 
   // Render results
+  const mult = (totalCostOwnership/harga).toFixed(1);
+  const tipRentEnd = sewaAwal > 0 ? t('kpr.tipRentEnd', {
+    mid: rentMid,
+    freq: rentFreq,
+    rent: formatRp(Math.round(sewaAwal * Math.pow(1 + rentMid/100, Math.floor(tenor/rentFreq))))
+  }) : '';
   document.getElementById('kpr-results').innerHTML = `
     <div class="card">
-      <h3 class="card-title">📋 Hasil Simulasi</h3>
+      <h3 class="card-title">${escapeHtml(t('kpr.resultsTitle'))}</h3>
 
-      <div class="kpr-section-title">💵 Pinjaman</div>
-      <div class="yield-row"><span>Harga Properti</span><span style="font-weight:700">${formatRpFull(harga)}</span></div>
-      <div class="yield-row"><span>DP (${dpPct}%)</span><span>${formatRpFull(Math.round(dpAmount))}</span></div>
-      <div class="yield-row highlight"><span>Jumlah Pinjaman</span><span style="font-weight:800;color:var(--primary)">${formatRpFull(Math.round(loanAmount))}</span></div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.loanSection'))}</div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.propertyPrice'))}</span><span style="font-weight:700">${formatRpFull(harga)}</span></div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.dpWithPct', { pct: dpPct }))}</span><span>${formatRpFull(Math.round(dpAmount))}</span></div>
+      <div class="yield-row highlight"><span>${escapeHtml(t('kpr.loanAmount'))}</span><span style="font-weight:800;color:var(--primary)">${formatRpFull(Math.round(loanAmount))}</span></div>
 
-      <div class="kpr-section-title">📅 Angsuran Bulanan</div>
-      <div class="yield-row highlight"><span>Periode Fixed (${fixedYears} thn, ${fixedRate}%)</span><span style="font-weight:800;font-size:16px;color:var(--danger)">${formatRpFull(Math.round(monthlyFixed))}</span></div>
-      ${floatingMonths > 0 ? `<div class="yield-row highlight"><span>Periode Floating (${tenor-fixedYears} thn, ${floatingRate}%)</span><span style="font-weight:800;font-size:16px;color:var(--danger)">${formatRpFull(Math.round(monthlyFloating))}</span></div>` : ''}
-      <div class="yield-row"><span>Asuransi/bln</span><span>${formatRp(monthlyInsurance)}</span></div>
-      <div class="yield-row highlight"><span>Total bayar/bln (Fixed)</span><span style="font-weight:800;color:var(--danger)">${formatRpFull(Math.round(monthlyFixed + monthlyInsurance))}</span></div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.monthlySection'))}</div>
+      <div class="yield-row highlight"><span>${escapeHtml(t('kpr.fixedPeriod', { y: fixedYears, rate: fixedRate }))}</span><span style="font-weight:800;font-size:16px;color:var(--danger)">${formatRpFull(Math.round(monthlyFixed))}</span></div>
+      ${floatingMonths > 0 ? `<div class="yield-row highlight"><span>${escapeHtml(t('kpr.floatPeriod', { y: tenor - fixedYears, rate: floatingRate }))}</span><span style="font-weight:800;font-size:16px;color:var(--danger)">${formatRpFull(Math.round(monthlyFloating))}</span></div>` : ''}
+      <div class="yield-row"><span>${escapeHtml(t('kpr.insuranceMo'))}</span><span>${formatRp(monthlyInsurance)}</span></div>
+      <div class="yield-row highlight"><span>${escapeHtml(t('kpr.totalPayMoFixed'))}</span><span style="font-weight:800;color:var(--danger)">${formatRpFull(Math.round(monthlyFixed + monthlyInsurance))}</span></div>
 
-      <div class="kpr-section-title">🧾 Biaya Akad (Bayar di Muka)</div>
-      <div class="yield-row sub"><span>DP</span><span>${formatRp(Math.round(dpAmount))}</span></div>
-      <div class="yield-row sub"><span>Provisi (${provisiPct}%)</span><span>${formatRp(Math.round(provisiAmount))}</span></div>
-      <div class="yield-row sub"><span>Admin</span><span>${formatRp(adminFee)}</span></div>
-      <div class="yield-row sub"><span>Appraisal</span><span>${formatRp(appraisal)}</span></div>
-      <div class="yield-row sub"><span>Notaris (${notarisPct}%)</span><span>${formatRp(Math.round(notarisAmount))}</span></div>
-      <div class="yield-row sub"><span>BPHTB (${bphtbPct}%)</span><span>${formatRp(Math.round(bphtbAmount))}</span></div>
-      <div class="yield-row highlight"><span>Total Bayar di Muka</span><span style="font-weight:800;color:var(--danger)">${formatRpFull(Math.round(totalOneTime))}</span></div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.closingPayNow'))}</div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.dp'))}</span><span>${formatRp(Math.round(dpAmount))}</span></div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.provisiWithPct', { pct: provisiPct }))}</span><span>${formatRp(Math.round(provisiAmount))}</span></div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.adminShort'))}</span><span>${formatRp(adminFee)}</span></div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.appraisal'))}</span><span>${formatRp(appraisal)}</span></div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.notarisFee', { pct: notarisPct }))}</span><span>${formatRp(Math.round(notarisAmount))}</span></div>
+      <div class="yield-row sub"><span>${escapeHtml(t('kpr.bphtbFee', { pct: bphtbPct }))}</span><span>${formatRp(Math.round(bphtbAmount))}</span></div>
+      <div class="yield-row highlight"><span>${escapeHtml(t('kpr.totalUpfront'))}</span><span style="font-weight:800;color:var(--danger)">${formatRpFull(Math.round(totalOneTime))}</span></div>
 
-      <div class="kpr-section-title">📊 Ringkasan Total</div>
-      <div class="yield-row"><span>Total Angsuran (${tenor} thn)</span><span>${formatRpFull(Math.round(totalPaid))}</span></div>
-      <div class="yield-row"><span>Total Bunga Dibayar</span><span style="color:var(--danger)">${formatRpFull(Math.round(totalInterest))}</span></div>
-      <div class="yield-row"><span>Total Asuransi (${tenor} thn)</span><span>${formatRp(Math.round(totalInsurancePerYear * tenor))}</span></div>
+      <div class="kpr-section-title">${escapeHtml(t('kpr.summaryTotal'))}</div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.totalInstallments', { n: tenor }))}</span><span>${formatRpFull(Math.round(totalPaid))}</span></div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.totalInterestPaid'))}</span><span style="color:var(--danger)">${formatRpFull(Math.round(totalInterest))}</span></div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.totalInsuranceNYears', { n: tenor }))}</span><span>${formatRp(Math.round(totalInsurancePerYear * tenor))}</span></div>
       <div class="yield-divider"></div>
-      <div class="yield-row highlight"><span>Total Biaya Kepemilikan</span><span style="font-weight:800;font-size:16px;color:var(--primary)">${formatRpFull(Math.round(totalCostOwnership))}</span></div>
-      <div class="yield-row"><span>vs Harga Properti</span><span style="color:var(--danger);font-weight:700">${(totalCostOwnership/harga*100).toFixed(0)}% (${(totalCostOwnership/harga).toFixed(1)}×)</span></div>
+      <div class="yield-row highlight"><span>${escapeHtml(t('kpr.totalCostOwnership'))}</span><span style="font-weight:800;font-size:16px;color:var(--primary)">${formatRpFull(Math.round(totalCostOwnership))}</span></div>
+      <div class="yield-row"><span>${escapeHtml(t('kpr.vsPropertyPrice'))}</span><span style="color:var(--danger);font-weight:700">${(totalCostOwnership/harga*100).toFixed(0)}% (${mult}×)</span></div>
     </div>
 
     ${amortHtml}
@@ -2634,13 +2814,13 @@ function calcKPR() {
     ${saveBtn}
 
     <div class="card">
-      <h3 class="card-title">💡 Tips</h3>
+      <h3 class="card-title">${escapeHtml(t('kpr.tipsTitle'))}</h3>
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.7">
-        <p>• DP lebih besar = cicilan lebih kecil + total bunga lebih rendah</p>
-        <p>• Pertimbangkan refinancing sebelum floating rate dimulai</p>
-        <p>• Cashflow positif = sewa menutupi cicilan (ideal untuk investor)</p>
-        <p>• Total biaya kepemilikan ${(totalCostOwnership/harga).toFixed(1)}× dari harga properti — pastikan yield tetap menguntungkan</p>
-        ${sewaAwal > 0 ? `<p>• Dengan kenaikan sewa ${rentMid}%/${rentFreq}thn, sewa kamu bisa mencapai ${formatRp(Math.round(sewaAwal * Math.pow(1 + rentMid/100, Math.floor(tenor/rentFreq))))}/bln di akhir tenor</p>` : ''}
+        <p>${escapeHtml(t('kpr.tip1'))}</p>
+        <p>${escapeHtml(t('kpr.tip2'))}</p>
+        <p>${escapeHtml(t('kpr.tip3'))}</p>
+        <p>${escapeHtml(t('kpr.tip4', { mult }))}</p>
+        ${sewaAwal > 0 ? `<p>${escapeHtml(tipRentEnd)}</p>` : ''}
       </div>
     </div>
   `;
@@ -2655,13 +2835,13 @@ function saveKPRToProperty(propName, cicilanPerBulan, sisaTenor) {
     prop = props.find(p => p.name === propName);
   }
   if (!prop) {
-    alert('Gagal menyimpan: properti tidak ditemukan.');
+    alert(t('msg.saveKprFail'));
     return;
   }
   prop.cicilanPerBulan = cicilanPerBulan;
   prop.sisaTenor = sisaTenor;
   saveProperties(props);
-  alert(`Tersimpan! Cicilan ${formatRpFull(cicilanPerBulan)}/bln (${sisaTenor} bulan) disimpan ke "${propName}".`);
+  alert(t('msg.saveKprOk', { cicilan: formatRpFull(cicilanPerBulan), mo: t('period.mo'), n: sisaTenor, name: propName }));
 }
 
 // ===== PROPERTY SETTINGS FORM =====
@@ -2672,20 +2852,20 @@ function showPropertySettings(propName) {
 
   let subtypeHtml = '';
   if (subtypes.length > 0) {
-    subtypeHtml = `<div class="form-group"><label class="form-label">Blok / Sub-tipe</label>
+    subtypeHtml = `<div class="form-group"><label class="form-label">${t('form.subtype')}</label>
       <div class="subtype-manage-list">
         ${subtypes.map(s => {
           const tpl = getSubtypeTemplate(propName, s);
           const facCount = tpl?.facilities ? tpl.facilities.split(',').filter(Boolean).length : 0;
-          const tplInfo = tpl ? `${formatRp(tpl.price)}/bln · ${facCount} fasilitas` : 'Belum ada template';
+          const tplInfo = tpl ? t('prop.subtypeTpl', { price: formatRp(tpl.price), mo: t('period.mo'), n: facCount }) : t('prop.noTemplate');
           return `<div class="subtype-manage-item">
           <div class="subtype-manage-info">
             <span class="subtype-manage-name">${escapeHtml(s)}</span>
             <span class="subtype-manage-detail">${escapeHtml(tplInfo)}</span>
           </div>
           <div class="subtype-manage-actions">
-            <button type="button" class="subtype-btn rename" onclick="renameSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="Rename">✏️</button>
-            <button type="button" class="subtype-btn delete" onclick="deleteSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="Hapus">🗑️</button>
+            <button type="button" class="subtype-btn rename" onclick="renameSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="${escapeHtml(t('prop.renameSubtypeTitle'))}">✏️</button>
+            <button type="button" class="subtype-btn delete" onclick="deleteSubtype(${onclickStrArg(propName)}, ${onclickStrArg(s)})" title="${escapeHtml(t('prop.deleteSubtypeTitle'))}">🗑️</button>
           </div>
         </div>`;
         }).join('')}
@@ -2693,48 +2873,61 @@ function showPropertySettings(propName) {
     </div>`;
   }
 
-  openModal(`⚙ Pengaturan — ${propName}`, `
+  openModal(t('prop.settingsTitle', { name: propName }), `
     <form onsubmit="savePropertySettings(event, ${onclickStrArg(propName)})">
-      <div class="form-group"><label class="form-label">Nama Properti</label>
+      <div class="form-group"><label class="form-label">${t('form.propName')}</label>
         <input class="form-input" name="propName" value="${propName}" required>
-        <small style="color:var(--text-muted);font-size:12px">Ubah nama properti ini</small></div>
+        <small style="color:var(--text-muted);font-size:12px">${t('prop.renameHint')}</small></div>
       ${subtypeHtml}
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">Nama Pemilik</label>
-        <input class="form-input" name="ownerName" value="${pd.ownerName||''}" placeholder="Nama lengkap pemilik"></div>
-      <div class="form-group"><label class="form-label">Alamat Pemilik</label>
-        <input class="form-input" name="ownerAddress" value="${pd.ownerAddress||''}" placeholder="Alamat lengkap"></div>
-      <div class="form-group"><label class="form-label">No. KTP Pemilik</label>
-        <input class="form-input" name="ownerKTP" value="${pd.ownerKTP||''}" placeholder="No. KTP / NIK"></div>
+      <div class="form-group"><label class="form-label">${t('form.ownerName')}</label>
+        <input class="form-input" name="ownerName" value="${pd.ownerName||''}" placeholder="${t('form.ownerNamePh')}"></div>
+      <div class="form-group"><label class="form-label">${t('form.ownerAddr')}</label>
+        <input class="form-input" name="ownerAddress" value="${pd.ownerAddress||''}" placeholder="${t('form.ownerAddrPh')}"></div>
+      <div class="form-group"><label class="form-label">${t('form.ownerKtp')}</label>
+        <input class="form-input" name="ownerKTP" value="${pd.ownerKTP||''}" placeholder="${t('form.ownerKtpPh')}"></div>
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">Harga Beli / Investasi Awal (Rp)</label>
+      <div class="form-group"><label class="form-label">${t('form.purchasePrice')}</label>
         <input class="form-input" name="purchasePrice" type="text" inputmode="numeric" data-rp placeholder="500.000.000" value="${pd.purchasePrice ? formatNumDots(pd.purchasePrice) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">Total harga beli properti (tanah + bangunan)</small></div>
-      <div class="form-group"><label class="form-label">PBB / Tahun (Rp)</label>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.purchaseHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.pbbYr')}</label>
         <input class="form-input" name="pbb" type="text" inputmode="numeric" data-rp placeholder="2.000.000" value="${pd.pbb ? formatNumDots(pd.pbb) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">Pajak Bumi & Bangunan tahunan</small></div>
-      <div class="form-group"><label class="form-label">Biaya Maintenance / Tahun (Rp)</label>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.pbbHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.pbbDue')}</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select class="form-select" name="pbbDueMonth" style="flex:1;min-width:120px">
+            <option value="">${t('form.monthDash')}</option>
+            ${[1,2,3,4,5,6,7,8,9,10,11,12].map(m => `<option value="${m}" ${Number(pd.pbbDueMonth)===m?'selected':''}>${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][m-1]}</option>`).join('')}
+          </select>
+          <input class="form-input" name="pbbDueDay" type="number" min="1" max="31" placeholder="${t('form.dayPh')}" style="max-width:90px" value="${pd.pbbDueDay || ''}">
+        </div>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.pbbDueHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.permit')}</label>
+        <input class="form-input" name="permitLabel" placeholder="${t('form.permitPh')}" value="${escapeHtml(pd.permitLabel || '')}">
+        <input class="form-input" name="permitExpiry" type="date" style="margin-top:8px" value="${pd.permitExpiry || ''}">
+        <small style="color:var(--text-muted);font-size:12px">${t('form.permitExpHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.maintYr')}</label>
         <input class="form-input" name="maintenance" type="text" inputmode="numeric" data-rp placeholder="5.000.000" value="${pd.maintenance ? formatNumDots(pd.maintenance) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">Renovasi, perbaikan, perawatan gedung</small></div>
-      <div class="form-group"><label class="form-label">Asuransi / Tahun (Rp)</label>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.maintHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.insuranceYr')}</label>
         <input class="form-input" name="insurance" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.insurance ? formatNumDots(pd.insurance) : ''}"></div>
-      <div class="form-group"><label class="form-label">Biaya Lain-lain / Tahun (Rp)</label>
+      <div class="form-group"><label class="form-label">${t('form.otherYr')}</label>
         <input class="form-input" name="otherExpense" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.otherExpense ? formatNumDots(pd.otherExpense) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">Listrik induk, kebersihan, keamanan, dll</small></div>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.otherYrHint')}</small></div>
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">🏦 Cicilan Bank / Bulan (Rp)</label>
+      <div class="form-group"><label class="form-label">${t('form.cicilanMo')}</label>
         <input class="form-input" name="cicilanPerBulan" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.cicilanPerBulan ? formatNumDots(pd.cicilanPerBulan) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">Angsuran KPR bulanan (pokok + bunga)</small></div>
-      <div class="form-group"><label class="form-label">Sisa Tenor (bulan)</label>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.cicilanHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.tenorLeft')}</label>
         <input class="form-input" name="sisaTenor" type="number" placeholder="0" value="${pd.sisaTenor||''}">
-        <small style="color:var(--text-muted);font-size:12px">Berapa bulan lagi cicilan lunas</small></div>
+        <small style="color:var(--text-muted);font-size:12px">${t('form.tenorHint')}</small></div>
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">Catatan</label>
-        <textarea class="form-textarea" name="notes" placeholder="Catatan properti...">${pd.notes||''}</textarea></div>
-      <button type="submit" class="btn btn-primary">Simpan</button>
+      <div class="form-group"><label class="form-label">${t('form.notes')}</label>
+        <textarea class="form-textarea" name="notes" placeholder="${t('form.propNotesPh')}">${pd.notes||''}</textarea></div>
+      <button type="submit" class="btn btn-primary">${t('form.save')}</button>
     </form>
     <div class="prop-settings-divider"></div>
-    <button class="btn btn-danger" onclick="deleteProperty(${onclickStrArg(propName)})">🗑️ Hapus Properti & Semua Unit</button>
+    <button class="btn btn-danger" onclick="deleteProperty(${onclickStrArg(propName)})">${t('prop.deleteAll')}</button>
   `);
   setTimeout(() => initRpInputs(), 50);
 }
@@ -2743,7 +2936,7 @@ function savePropertySettings(e, oldPropName) {
   e.preventDefault();
   const f = e.target;
   const newPropName = f.propName.value.trim();
-  if (!newPropName) { alert('Nama properti wajib diisi'); return; }
+  if (!newPropName) { alert(t('msg.propRequired')); return; }
 
   const props = getProperties();
   let prop = props.find(p => p.name === oldPropName);
@@ -2756,7 +2949,7 @@ function savePropertySettings(e, oldPropName) {
   if (newPropName !== oldPropName) {
     // Check duplicate
     if (props.some(p => p.name === newPropName && p.name !== oldPropName)) {
-      alert('Nama properti sudah dipakai'); return;
+      alert(t('msg.propDuplicate')); return;
     }
     const capMap = getYieldCapOverrideMap();
     if (Object.prototype.hasOwnProperty.call(capMap, oldPropName)) {
@@ -2785,6 +2978,10 @@ function savePropertySettings(e, oldPropName) {
   prop.ownerKTP = f.ownerKTP.value.trim();
   prop.purchasePrice = parseNum(f.purchasePrice.value) || 0;
   prop.pbb = parseNum(f.pbb.value) || 0;
+  prop.pbbDueMonth = f.pbbDueMonth?.value ? Number(f.pbbDueMonth.value) : '';
+  prop.pbbDueDay = f.pbbDueDay?.value ? Number(f.pbbDueDay.value) : '';
+  prop.permitLabel = (f.permitLabel?.value || '').trim();
+  prop.permitExpiry = f.permitExpiry?.value || '';
   prop.maintenance = parseNum(f.maintenance.value) || 0;
   prop.insurance = parseNum(f.insurance.value) || 0;
   prop.otherExpense = parseNum(f.otherExpense.value) || 0;
@@ -2799,8 +2996,8 @@ function savePropertySettings(e, oldPropName) {
 function deleteProperty(propName) {
   const units = getUnits().filter(u => u.property === propName);
   const msg = units.length > 0
-    ? `Hapus properti "${propName}" beserta ${units.length} unit di dalamnya?\n\nPenyewa terkait akan kehilangan unit. Data ini tidak bisa di-undo.`
-    : `Hapus properti "${propName}"?`;
+    ? t('confirm.deletePropUnits', { name: propName, n: units.length })
+    : t('confirm.deleteProp', { name: propName });
   if (!confirm(msg)) return;
 
   const capMap = getYieldCapOverrideMap();
@@ -2824,7 +3021,7 @@ function deleteProperty(propName) {
 }
 
 function renameSubtype(propName, oldSub) {
-  const newSub = prompt(`Rename "${oldSub}" menjadi:`, oldSub);
+  const newSub = prompt(t('prompt.renameSubtype', { old: oldSub }), oldSub);
   if (!newSub || newSub.trim() === '' || newSub.trim() === oldSub) return;
   const units = getUnits();
   units.forEach(u => { if (u.property === propName && u.subtype === oldSub) u.subtype = newSub.trim(); });
@@ -2840,7 +3037,7 @@ function renameSubtype(propName, oldSub) {
 function deleteSubtype(propName, sub) {
   const units = getUnits();
   const affected = units.filter(u => u.property === propName && u.subtype === sub);
-  if (!confirm(`Hapus sub-tipe "${sub}"?\n\n${affected.length} unit akan kehilangan sub-tipe ini (unit tidak dihapus, hanya sub-tipenya di-clear).`)) return;
+  if (!confirm(t('confirm.deleteSubtype', { sub, n: affected.length }))) return;
   units.forEach(u => { if (u.property === propName && u.subtype === sub) u.subtype = ''; });
   saveUnits(units);
   // Remove template
@@ -2872,55 +3069,55 @@ function showBulkAddForm(propName) {
   const propData = getPropertyData(propName);
   const type = units.find(u => u.property === propName)?.type || 'kos';
 
-  openModal('Tambah Unit Massal', `
+  openModal(t('bulk.title'), `
     <form onsubmit="saveBulkUnits(event, ${onclickStrArg(propName)})">
       <div class="card" style="background:var(--primary-glow);padding:14px;margin-bottom:16px;border-radius:12px">
         <div style="font-size:13px;color:var(--primary);font-weight:700">📦 ${escapeHtml(propName)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Otomatis generate banyak unit sekaligus</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${t('bulk.blurb')}</div>
       </div>
 
-      <div class="form-group"><label class="form-label">Blok / Sub-tipe</label>
+      <div class="form-group"><label class="form-label">${t('form.subtype')}</label>
         <select class="form-select" name="subtypeSelect" id="bulk-subtype" onchange="onBulkSubtypeChange(this.value, ${onclickStrArg(propName)})">
-          <option value="">Tanpa blok/sub-tipe</option>
+          <option value="">${t('form.subtypeNone')}</option>
           ${existingSubtypes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
-          <option value="__new__">+ Tambah baru...</option>
+          <option value="__new__">${t('form.addNew')}</option>
         </select>
-        <input class="form-input" id="bulk-new-subtype" placeholder="Nama sub-tipe baru..." style="margin-top:8px;display:none">
+        <input class="form-input" id="bulk-new-subtype" placeholder="${t('form.subtypePh')}" style="margin-top:8px;display:none">
       </div>
 
-      <div class="form-group"><label class="form-label">Range Nomor Unit</label>
+      <div class="form-group"><label class="form-label">${t('bulk.range')}</label>
         <div style="display:flex;gap:8px;align-items:center">
           <input class="form-input" name="startNum" type="number" placeholder="101" required style="flex:1">
-          <span style="color:var(--text-muted);font-weight:700">s/d</span>
+          <span style="color:var(--text-muted);font-weight:700">${t('bulk.to')}</span>
           <input class="form-input" name="endNum" type="number" placeholder="120" required style="flex:1">
         </div>
-        <small style="color:var(--text-muted);margin-top:6px;display:block">Contoh: 101 s/d 120 → generate 20 unit (101, 102, ... 120)</small>
+        <small style="color:var(--text-muted);margin-top:6px;display:block">${t('bulk.rangeHint')}</small>
       </div>
 
-      <div class="form-group"><label class="form-label">Prefix (opsional)</label>
-        <input class="form-input" name="prefix" placeholder="Contoh: Kamar, Unit, Room">
-        <small style="color:var(--text-muted);margin-top:4px;display:block">Hasil: "Kamar 101", "Kamar 102", dll. Kosongkan = hanya angka.</small>
+      <div class="form-group"><label class="form-label">${t('bulk.prefix')}</label>
+        <input class="form-input" name="prefix" placeholder="${t('bulk.prefixPh')}">
+        <small style="color:var(--text-muted);margin-top:4px;display:block">${t('bulk.prefixHint')}</small>
       </div>
 
-      <div class="form-group"><label class="form-label">Skip Nomor (opsional)</label>
-        <input class="form-input" name="skipNums" placeholder="Contoh: 104, 113">
-        <small style="color:var(--text-muted);margin-top:4px;display:block">Nomor yang dilewati (misal: sudah terpakai).</small>
+      <div class="form-group"><label class="form-label">${t('bulk.skip')}</label>
+        <input class="form-input" name="skipNums" placeholder="${t('bulk.skipPh')}">
+        <small style="color:var(--text-muted);margin-top:4px;display:block">${t('bulk.skipHint')}</small>
       </div>
 
-      <div class="form-group"><label class="form-label">Harga Sewa / Bulan (Rp)</label>
+      <div class="form-group"><label class="form-label">${t('bulk.rentMo')}</label>
         <input class="form-input" name="price" type="text" inputmode="numeric" data-rp id="bulk-price" placeholder="1.500.000" value="0">
       </div>
 
-      <div class="form-group"><label class="form-label">Status Awal</label>
+      <div class="form-group"><label class="form-label">${t('bulk.initialStatus')}</label>
         <select class="form-select" name="status">
-          <option value="vacant">Kosong</option>
-          <option value="occupied">Terisi</option>
+          <option value="vacant">${t('form.vacant')}</option>
+          <option value="occupied">${t('form.occupied')}</option>
         </select>
       </div>
 
       <div id="bulk-preview" style="margin-bottom:16px"></div>
 
-      <button type="submit" class="btn btn-primary">Tambah Semua Unit</button>
+      <button type="submit" class="btn btn-primary">${t('bulk.submit')}</button>
     </form>
     <script>
       document.querySelector('[name="startNum"]').addEventListener('input', previewBulk);
@@ -2961,8 +3158,8 @@ function previewBulk() {
 
   document.getElementById('bulk-preview').innerHTML = `
     <div class="card" style="padding:12px;border-radius:10px;background:var(--bg)">
-      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px">Preview: ${count} unit akan dibuat</div>
-      <div style="font-size:12px;color:var(--text-secondary)">${sample.join(', ')}${remaining > 0 ? `, ... +${remaining} lainnya` : ''}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px">${t('bulk.previewTitle', { n: count })}</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${sample.join(', ')}${remaining > 0 ? t('bulk.previewMore', { n: remaining }) : ''}</div>
     </div>
   `;
 }
@@ -2980,8 +3177,8 @@ function saveBulkUnits(e, propName) {
   const skipStr = f.skipNums?.value || '';
   const skipNums = skipStr.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
 
-  if (start <= 0 || end < start) { alert('Range nomor tidak valid'); return; }
-  if (end - start > 500) { alert('Maksimal 500 unit per batch'); return; }
+  if (start <= 0 || end < start) { alert(t('msg.rangeInvalid')); return; }
+  if (end - start > 500) { alert(t('msg.bulkMax')); return; }
 
   const units = getUnits();
   const type = units.find(u => u.property === propName)?.type || 'kos';
@@ -3006,12 +3203,12 @@ function saveBulkUnits(e, propName) {
     added++;
   }
 
-  if (added === 0) { alert('Tidak ada unit baru ditambahkan. Semua nomor sudah ada.'); return; }
+  if (added === 0) { alert(t('msg.bulkNone')); return; }
 
   saveUnits(units);
   closeModal();
   refreshCurrentPage();
-  alert(`✅ ${added} unit berhasil ditambahkan!${skipped > 0 ? `\n⚠️ ${skipped} unit dilewati (sudah ada).` : ''}`);
+  alert(t('msg.bulkDone', { added }) + (skipped > 0 ? t('msg.bulkSkipped', { n: skipped }) : ''));
 }
 
 // ===== TELEGRAM REMINDER =====
@@ -3026,21 +3223,21 @@ function saveTelegramConfig(token, chatId) {
 
 async function sendTelegramReminder() {
   const cfg = getTelegramConfig();
-  if (!cfg.token || !cfg.chatId) { alert('Atur Bot Token & Chat ID di Settings terlebih dahulu.'); return; }
+  if (!cfg.token || !cfg.chatId) { alert(t('msg.tgSetupFirst')); return; }
 
   const payments = getPayments(), tenants = getTenants(), units = getUnits();
   const pending = payments.filter(p => (p.status === 'pending' || p.status === 'overdue') && p.type === 'income');
 
-  if (!pending.length) { alert('Tidak ada tagihan pending.'); return; }
+  if (!pending.length) { alert(t('msg.noPendingBills')); return; }
 
   let msg = '🏠 *PropertiKu — Reminder Sewa*\n\n';
   pending.forEach(p => {
-    const t = tenants.find(x => x.id === p.tenantId);
+    const tn = tenants.find(x => x.id === p.tenantId);
     const d = daysUntil(p.dueDate);
     const status = d < 0 ? `⚠️ TERLAMBAT ${Math.abs(d)} hari` : `⏳ ${d} hari lagi`;
-    msg += `👤 *${t?.name || 'Penyewa'}*\n`;
+    msg += `👤 *${tn?.name || t('pay.tenantWord')}*\n`;
     msg += `📍 ${p.propertyName || '-'}\n`;
-    msg += `💰 ${formatRpFull(p.amount)} — ${p.description || 'Sewa ' + p.period}\n`;
+    msg += `💰 ${formatRpFull(p.amount)} — ${p.description || t('pay.rentFallback', { period: p.period })}\n`;
     msg += `📅 Jatuh tempo: ${formatDate(p.dueDate)} (${status})\n\n`;
   });
 
@@ -3051,10 +3248,10 @@ async function sendTelegramReminder() {
       body: JSON.stringify({ chat_id: cfg.chatId, text: msg, parse_mode: 'Markdown' })
     });
     const data = await res.json();
-    if (data.ok) alert('Reminder berhasil dikirim ke Telegram!');
-    else alert('Gagal: ' + (data.description || 'Unknown error'));
+    if (data.ok) alert(t('msg.tgOk'));
+    else alert(t('msg.tgFail', { err: data.description || 'Unknown error' }));
   } catch (err) {
-    alert('Error: ' + err.message);
+    alert(t('msg.error', { err: err.message }));
   }
 }
 
@@ -3063,97 +3260,80 @@ function showSettings() {
   const cfg = getTelegramConfig();
   const isDark = getTheme() === 'dark';
   const um = getUiMode();
-  openModal('Pengaturan', `
+  openModal(t('settings.title'), `
     <div class="form-group" style="margin-bottom:20px">
-      <label class="form-label">Tampilan</label>
+      <label class="form-label">${t('settings.display')}</label>
       <div class="ui-mode-segment">
-        <button type="button" class="ui-mode-btn ${um === 'simple' ? 'active' : ''}" onclick="setUiModeFromSettings('simple')">Sederhana</button>
-        <button type="button" class="ui-mode-btn ${um === 'pro' ? 'active' : ''}" onclick="setUiModeFromSettings('pro')">Pro</button>
+        <button type="button" class="ui-mode-btn ${um === 'simple' ? 'active' : ''}" onclick="setUiModeFromSettings('simple')">${t('settings.simple')}</button>
+        <button type="button" class="ui-mode-btn ${um === 'pro' ? 'active' : ''}" onclick="setUiModeFromSettings('pro')">${t('settings.pro')}</button>
       </div>
-      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45"><strong>Sederhana</strong>: Home lebih ringkas, tanpa ROI di beranda; menu bawah tetap <em>Ringkasan</em> (keuangan bulan/tahun saja). <strong>Pro</strong>: analisis sewa &amp; apresiasi, KPR, grafik, ROI di beranda, tambah massal unit.</small>
+      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.modeHelp')}</small>
     </div>
 
     <div class="form-group" style="margin-bottom:20px">
-      <label class="form-label">🌙 Mode Gelap</label>
+      <label class="form-label">${t('settings.dark')}</label>
       <div style="display:flex;align-items:center;gap:12px">
         <label style="position:relative;display:inline-block;width:50px;height:28px;cursor:pointer">
           <input type="checkbox" ${isDark ? 'checked' : ''} onchange="toggleTheme();showSettings()" style="opacity:0;width:0;height:0">
           <span style="position:absolute;inset:0;background:${isDark ? 'var(--primary)' : 'var(--border)'};border-radius:28px;transition:0.3s"></span>
           <span style="position:absolute;top:3px;left:${isDark ? '25px' : '3px'};width:22px;height:22px;background:white;border-radius:50%;transition:0.3s"></span>
         </label>
-        <span style="font-size:13px;color:var(--text-secondary)">${isDark ? 'Aktif' : 'Nonaktif'}</span>
+        <span style="font-size:13px;color:var(--text-secondary)">${isDark ? t('settings.darkOn') : t('settings.darkOff')}</span>
       </div>
     </div>
 
     <div class="form-group" style="margin-bottom:20px">
-      <label class="form-label">💾 Penggunaan Storage</label>
-      <div style="font-size:13px;color:var(--text-secondary)">${getStorageUsage()} MB digunakan dari ~5 MB</div>
+      <label class="form-label">${t('settings.storage')}</label>
+      <div style="font-size:13px;color:var(--text-secondary)">${getStorageUsage()}${t('settings.storageSub')}</div>
       <div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.min(parseFloat(getStorageUsage()) / 5 * 100, 100)}%;background:var(--primary);border-radius:3px"></div></div>
     </div>
 
     <div class="yield-divider" style="margin:16px 0"></div>
 
     <div class="settings-info">
-      🤖 Hubungkan Telegram Bot untuk mengirim reminder tagihan sewa ke chat pribadimu.
+      ${t('settings.tgIntro')}
     </div>
 
     <div class="card" style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:10px">📋 Cara Setup (5 menit)</div>
+      <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:10px">${t('settings.tgSetup')}</div>
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
-        <strong>Step 1 — Buat Bot</strong><br>
-        1. Buka Telegram, cari <strong>@BotFather</strong><br>
-        2. Kirim <code>/newbot</code><br>
-        3. Beri nama bot (misal: "PropertiKu Reminder")<br>
-        4. Beri username bot (misal: "PropertiKu_bot")<br>
-        5. BotFather akan kasih <strong>Token</strong> → copy & paste di bawah<br>
-        <br>
-        <strong>Step 2 — Dapatkan Chat ID</strong><br>
-        1. Buka bot kamu di Telegram (cari username-nya)<br>
-        2. Klik <strong>Start</strong>, lalu kirim pesan apa saja (misal: "halo")<br>
-        3. Paste token di bawah, lalu klik tombol <strong>"🔍 Ambil Chat ID"</strong><br>
-        <br>
-        <strong>Step 3 — Test & Simpan</strong><br>
-        1. Klik <strong>"🧪 Test Koneksi"</strong> untuk verifikasi<br>
-        2. Klik <strong>"Simpan Pengaturan"</strong><br>
-        3. Gunakan <strong>"📨 Kirim Reminder"</strong> kapan saja!<br>
-        <br>
-        <em style="color:var(--text-muted)">Jika test gagal dengan error jaringan/CORS: buka app lewat server lokal (http://) atau hosting, bukan file:// — API Telegram membutuhkan fetch dari origin yang diizinkan browser.</em>
+        ${t('settings.tgSteps')}
       </div>
     </div>
 
     <form onsubmit="saveSettingsForm(event)">
-      <div class="form-group"><label class="form-label">Telegram Bot Token</label>
+      <div class="form-group"><label class="form-label">${t('settings.tgToken')}</label>
         <input class="form-input" name="tgToken" id="tg-token-input" placeholder="123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ" value="${cfg.token}"></div>
 
-      <div class="form-group"><label class="form-label">Telegram Chat ID</label>
+      <div class="form-group"><label class="form-label">${t('settings.tgChat')}</label>
         <div style="display:flex;gap:8px">
           <input class="form-input" name="tgChatId" id="tg-chatid-input" placeholder="123456789" value="${cfg.chatId}" style="flex:1">
-          <button type="button" class="btn btn-outline" onclick="fetchTelegramChatId()" style="white-space:nowrap;font-size:12px">🔍 Ambil Chat ID</button>
+          <button type="button" class="btn btn-outline" onclick="fetchTelegramChatId()" style="white-space:nowrap;font-size:12px">${t('settings.fetchChat')}</button>
         </div>
         <div id="tg-chatid-status" style="font-size:11px;margin-top:6px;color:var(--text-muted)"></div>
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button type="button" class="btn btn-outline" onclick="testTelegramConnection()" style="flex:1;font-size:13px">🧪 Test Koneksi</button>
-        <button type="submit" class="btn btn-primary" style="flex:1;font-size:13px">💾 Simpan</button>
+        <button type="button" class="btn btn-outline" onclick="testTelegramConnection()" style="flex:1;font-size:13px">${t('settings.test')}</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;font-size:13px">${t('settings.save')}</button>
       </div>
     </form>
 
     <div id="tg-test-result" style="margin-bottom:12px"></div>
 
-    <button class="btn btn-success" onclick="sendTelegramReminder()" style="width:100%;margin-bottom:16px">📨 Kirim Reminder Sekarang</button>
+    <button class="btn btn-success" onclick="sendTelegramReminder()" style="width:100%;margin-bottom:16px">${t('settings.sendNow')}</button>
 
     <div class="yield-divider" style="margin:16px 0"></div>
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">📦 Backup & Restore</div>
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">${t('settings.backup')}</div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <button type="button" class="btn btn-outline" onclick="exportData()" style="flex:1">📤 Export Data</button>
-      <button type="button" class="btn btn-outline" onclick="importData()" style="flex:1">📥 Import Data</button>
+      <button type="button" class="btn btn-outline" onclick="exportData()" style="flex:1">${t('settings.export')}</button>
+      <button type="button" class="btn btn-outline" onclick="importData()" style="flex:1">${t('settings.import')}</button>
     </div>
-    <small style="color:var(--text-muted);display:block;margin-bottom:16px">Export data dari PC, lalu Import di HP untuk mindahin data.</small>
+    <small style="color:var(--text-muted);display:block;margin-bottom:16px">${t('settings.backupHint')}</small>
 
     <div class="yield-divider" style="margin:16px 0"></div>
     <div class="btn-group">
-      <button class="btn btn-danger" onclick="if(confirm('Hapus SEMUA data? Tidak bisa di-undo.')) { localStorage.clear(); location.reload(); }">🗑 Reset Semua Data</button>
+      <button class="btn btn-danger" onclick="if(confirm(${JSON.stringify(t('settings.resetConfirm'))})) { localStorage.clear(); location.reload(); }">${t('settings.reset')}</button>
     </div>
   `);
 }
@@ -3222,7 +3402,7 @@ function saveSettingsForm(e) {
   e.preventDefault();
   const f = e.target;
   saveTelegramConfig(f.tgToken.value.trim(), f.tgChatId.value.trim());
-  alert('✅ Pengaturan tersimpan!');
+  alert(t('msg.settingsSaved'));
 }
 
 // ===== AUTO REMINDER ON LOAD =====
@@ -3247,7 +3427,7 @@ async function autoReminderCheck() {
 
   const tenants = getTenants();
   let msg = '🏠 *PropertiKu — Reminder Otomatis*\n';
-  msg += `📅 ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  msg += `📅 ${new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
 
   if (overdue.length > 0) {
     msg += '⚠️ *NUNGGAK / TERLAMBAT:*\n';
@@ -3290,7 +3470,7 @@ async function autoReminderCheck() {
 }
 
 // ===== EXPORT / IMPORT =====
-const BACKUP_ARRAY_KEYS = ['properties', 'units', 'tenants', 'payments', 'tenantHistory', 'subtypeTemplates', 'unitPhotos'];
+const BACKUP_ARRAY_KEYS = ['properties', 'units', 'tenants', 'payments', 'tenantHistory', 'subtypeTemplates', 'unitPhotos', 'maintenanceTickets'];
 
 function validateBackupImport(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -3354,12 +3534,12 @@ function importData() {
           alert(check.msg);
           return;
         }
-        if (!confirm(`Import ${check.keys.length} data? Data saat ini akan ditimpa.`)) return;
+        if (!confirm(t('confirm.import', { n: check.keys.length }))) return;
         check.keys.forEach(k => localStorage.setItem(k, data[k]));
-        alert('Data berhasil diimport! App akan reload.');
+        alert(t('msg.importOk'));
         location.reload();
       } catch (err) {
-        alert('File tidak valid: ' + err.message);
+        alert(t('msg.fileInvalid', { err: err.message }));
       }
     };
     reader.readAsText(file);
@@ -3368,41 +3548,71 @@ function importData() {
 }
 
 // ===== ARCHIVE TENANT =====
-function archiveTenant(tenantId) {
+function showArchiveTenantModal(tenantId) {
+  const tenant = getTenants().find(t => t.id === tenantId);
+  if (!tenant) return;
+  const unit = getUnits().find(u => u.id === tenant.unitId);
+  const dep = tenant.deposit || 0;
+  const sub = unit ? escapeHtml(unit.property + ' — ' + unit.name) : '';
+  openModal(t('archive.title'), `
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px"><strong>${escapeHtml(tenant.name)}</strong>${sub ? ' · ' + sub : ''}</p>
+    <form onsubmit="submitArchiveTenant(event, ${onclickStrArg(tenantId)})">
+      <div class="form-group"><label class="form-label">${t('form.depositDeduct')}</label>
+        <input class="form-input" name="depositDeduct" type="text" data-rp inputmode="numeric" placeholder="0" value=""></div>
+      <div class="form-group"><label class="form-label">${t('form.depositWhy')}</label>
+        <textarea class="form-textarea" name="depositNotes" placeholder="${t('form.depositWhyPh')}"></textarea></div>
+      <div class="form-group"><label class="form-label">${t('form.depositReturn')}</label>
+        <input class="form-input" name="depositReturned" type="text" data-rp inputmode="numeric" placeholder="${t('form.depositReturnPh')}" value="${dep ? formatNumDots(dep) : ''}"></div>
+      <small style="color:var(--text-muted);display:block;margin-bottom:12px">${t('form.depositRecorded', { amt: formatRpFull(dep) })}</small>
+      <button type="submit" class="btn btn-warning">${t('archive.submit')}</button>
+    </form>
+  `);
+  setTimeout(() => initRpInputs(), 50);
+}
+
+function submitArchiveTenant(e, tenantId) {
+  e.preventDefault();
+  const f = e.target;
+  const depositDeduct = parseNum(f.depositDeduct.value) || 0;
+  const depositReturned = parseNum(f.depositReturned.value) || 0;
+  const depositNotes = f.depositNotes.value.trim();
+  doArchiveTenant(tenantId, { depositDeduct, depositReturned, depositNotes });
+}
+
+function doArchiveTenant(tenantId, depInfo) {
   const tenants = getTenants();
   const tenant = tenants.find(t => t.id === tenantId);
   if (!tenant) return;
   const unit = getUnits().find(u => u.id === tenant.unitId);
-  if (!confirm('Akhiri kontrak ' + tenant.name + '?\n\nPenyewa akan diarsipkan, unit dikembalikan ke status Kosong.\nTagihan yang belum dibayar akan dihapus.\nTagihan lunas tetap disimpan.')) return;
+  if (!confirm(t('confirm.endLease', { name: tenant.name }))) return;
 
-  // Copy to tenant history
   const history = getTenantHistory();
   history.push({
     ...tenant,
     unitId: tenant.unitId,
     unitName: unit ? unit.name : '',
     propertyName: unit ? unit.property : '',
-    archivedAt: new Date().toISOString()
+    archivedAt: new Date().toISOString(),
+    archiveDepositDeducted: depInfo.depositDeduct,
+    archiveDepositReturned: depInfo.depositReturned,
+    archiveDepositNotes: depInfo.depositNotes
   });
   saveTenantHistory(history);
 
-  // Set unit back to vacant
   if (unit) {
     const units = getUnits();
     const ui = units.findIndex(u => u.id === tenant.unitId);
     if (ui >= 0) { units[ui].status = 'vacant'; saveUnits(units); }
   }
 
-  // Remove unpaid auto-generated payments, keep paid ones
   const payments = getPayments().filter(p => !(p.tenantId === tenantId && p.autoGenerated && p.status !== 'paid'));
   savePayments(payments);
 
-  // Remove tenant from active list
   saveTenants(tenants.filter(t => t.id !== tenantId));
 
   closeModal();
   refreshCurrentPage();
-  alert('Kontrak ' + tenant.name + ' telah diakhiri dan diarsipkan.');
+  showToast(t('msg.archiveDone'), 'success');
 }
 
 // ===== UNIT HISTORY =====
@@ -3417,29 +3627,36 @@ function showUnitHistory(unitId) {
 
   if (currentTenant) {
     html += '<div class="card" style="padding:12px;border-radius:10px;margin-bottom:12px;border-left:4px solid var(--success)">';
-    html += '<div style="font-weight:700;color:var(--success);font-size:13px;margin-bottom:4px">Penyewa Saat Ini</div>';
+    html += '<div style="font-weight:700;color:var(--success);font-size:13px;margin-bottom:4px">' + t('history.current') + '</div>';
     html += '<div style="font-weight:700">' + escapeHtml(currentTenant.name) + '</div>';
     html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(currentTenant.startDate) + ' — ' + formatDate(currentTenant.endDate) + '</div>';
     if (currentTenant.phone) html += '<div style="font-size:12px;color:var(--text-muted)">' + escapeHtml(currentTenant.phone) + '</div>';
     html += '</div>';
   } else {
-    html += '<div style="padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;text-align:center;color:var(--text-muted);font-size:13px">Unit sedang kosong</div>';
+    html += '<div style="padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;text-align:center;color:var(--text-muted);font-size:13px">' + t('history.vacantNow') + '</div>';
   }
 
   if (archived.length > 0) {
-    html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text-secondary)">Riwayat Penyewa</div>';
+    html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text-secondary)">' + t('history.past') + '</div>';
     archived.forEach(h => {
       html += '<div class="card" style="padding:10px;border-radius:8px;margin-bottom:8px;border-left:4px solid var(--border)">';
       html += '<div style="font-weight:600;font-size:13px">' + escapeHtml(h.name) + '</div>';
       html += '<div style="font-size:12px;color:var(--text-muted)">' + formatDate(h.startDate) + ' — ' + formatDate(h.endDate) + '</div>';
-      html += '<div style="font-size:11px;color:var(--text-muted)">Diarsipkan: ' + formatDate(h.archivedAt) + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-muted)">' + t('history.archived', { date: formatDate(h.archivedAt) }) + '</div>';
+      if (h.archiveDepositDeducted || h.archiveDepositReturned || h.archiveDepositNotes) {
+        const depBits = [];
+        if (h.archiveDepositDeducted) depBits.push(t('history.deduct', { amt: formatRpFull(h.archiveDepositDeducted) }));
+        if (h.archiveDepositReturned) depBits.push(t('history.returned', { amt: formatRpFull(h.archiveDepositReturned) }));
+        if (h.archiveDepositNotes) depBits.push(escapeHtml(h.archiveDepositNotes));
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:6px">' + depBits.join(' · ') + '</div>';
+      }
       html += '</div>';
     });
   } else if (!currentTenant) {
-    html += '<p class="empty-state">Belum ada riwayat penyewa</p>';
+    html += '<p class="empty-state">' + t('history.none') + '</p>';
   }
 
-  openModal('Riwayat Unit', html);
+  openModal(t('history.title'), html);
 }
 
 // ===== CONTRACT GENERATION =====
@@ -3543,9 +3760,9 @@ ${unit.facilities ? '<tr><td>Fasilitas</td><td>: ' + unit.facilities.split(',').
 
 function downloadContract(tenantId) {
   const tenant = getTenants().find(t => t.id === tenantId);
-  if (!tenant) { alert('Penyewa tidak ditemukan'); return; }
+  if (!tenant) { alert(t('msg.tenantNotFound')); return; }
   const html = generateContract(tenantId);
-  if (!html) { alert('Data tidak lengkap untuk membuat kontrak'); return; }
+  if (!html) { alert(t('msg.contractIncomplete')); return; }
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3563,7 +3780,7 @@ function renderROICards() {
   const container = document.getElementById('dashboard-roi');
   if (!container) return;
 
-  if (!props.length) { container.innerHTML = '<p class="empty-state">Belum ada properti</p>'; return; }
+  if (!props.length) { container.innerHTML = '<p class="empty-state">' + t('yield.noProps') + '</p>'; return; }
 
   container.innerHTML = props.map(prop => {
     const pd = getPropertyData(prop);
@@ -3608,7 +3825,7 @@ function renderROICards() {
 // ===== UNIT PHOTOS =====
 function addUnitPhoto(unitId) {
   const photos = getUnitPhotos().filter(p => p.unitId === unitId);
-  if (photos.length >= 5) { alert('Maksimal 5 foto per unit'); return; }
+  if (photos.length >= 5) { alert(t('msg.maxPhotos')); return; }
 
   const input = document.createElement('input');
   input.type = 'file';
@@ -3633,7 +3850,7 @@ function addUnitPhoto(unitId) {
 }
 
 function deleteUnitPhoto(photoId, unitId) {
-  if (!confirm('Hapus foto ini?')) return;
+  if (!confirm(t('confirm.deletePhoto'))) return;
   saveUnitPhotos(getUnitPhotos().filter(p => p.id !== photoId));
   closeModal();
   showUnitForm(unitId);
@@ -3642,7 +3859,7 @@ function deleteUnitPhoto(photoId, unitId) {
 function showUnitPhotos(unitId) {
   const photos = getUnitPhotos().filter(p => p.unitId === unitId);
   const unit = getUnits().find(u => u.id === unitId);
-  if (photos.length === 0) { alert('Belum ada foto untuk unit ini'); return; }
+  if (photos.length === 0) { alert(t('msg.noPhotos')); return; }
 
   let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
   photos.forEach((ph, idx) => {
@@ -3652,7 +3869,7 @@ function showUnitPhotos(unitId) {
   });
   html += '</div>';
 
-  openModal('Foto ' + (unit ? unit.name : 'Unit'), html);
+  openModal(t('photo.title', { name: unit ? unit.name : t('form.unitLabel') }), html);
 }
 
 function viewFullPhoto(idx, unitId) {
@@ -3666,6 +3883,303 @@ function viewFullPhoto(idx, unitId) {
   img.style.cssText = 'max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px';
   overlay.appendChild(img);
   document.body.appendChild(overlay);
+}
+
+function nextAnnualOccurrenceDate(month1to12, dayOfMonth) {
+  const now = new Date();
+  const dom = Math.min(Math.max(Number(dayOfMonth) || 15, 1), 28);
+  let y = now.getFullYear();
+  let d = new Date(y, month1to12 - 1, dom);
+  d.setHours(0, 0, 0, 0);
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  if (d < todayStart) d = new Date(y + 1, month1to12 - 1, dom);
+  return d;
+}
+
+function collectBusinessReminders(contractDays = 60, permitDays = 90) {
+  const out = [];
+  getTenants().forEach(tenant => {
+    const dl = daysUntil(tenant.endDate);
+    if (dl >= 0 && dl <= contractDays) {
+      out.push({
+        level: dl <= 14 ? 'urgent' : 'soon',
+        title: t('rem.contract', { name: tenant.name }),
+        sub: t('rem.contractSub', { date: formatDate(tenant.endDate) }),
+        whenLabel: dl === 0 ? t('rem.today') : t('rem.days', { n: dl }),
+        sort: dl
+      });
+    }
+  });
+  getProperties().forEach(p => {
+    if (!p.pbbDueMonth) return;
+    const dNext = nextAnnualOccurrenceDate(Number(p.pbbDueMonth), p.pbbDueDay);
+    const dl = Math.ceil((dNext.getTime() - Date.now()) / 864e5);
+    if (dl >= 0 && dl <= 60) {
+      out.push({
+        level: dl <= 14 ? 'urgent' : 'soon',
+        title: t('rem.pbb', { name: p.name }),
+        sub: t('rem.pbbSub', { date: formatDate(dNext.toISOString().slice(0, 10)) }),
+        whenLabel: t('rem.days', { n: dl }),
+        sort: 200 + dl
+      });
+    }
+  });
+  getProperties().forEach(p => {
+    if (!p.permitExpiry) return;
+    const dl = daysUntil(p.permitExpiry);
+    if (dl >= 0 && dl <= permitDays) {
+      out.push({
+        level: dl <= 30 ? 'urgent' : 'soon',
+        title: t('rem.permit', { label: p.permitLabel || t('rem.permitDefault'), name: p.name }),
+        sub: t('rem.permitSub', { date: formatDate(p.permitExpiry) }),
+        whenLabel: t('rem.days', { n: dl }),
+        sort: 400 + dl
+      });
+    }
+  });
+  const openT = getMaintenanceTickets().filter(x => x.status !== 'done').length;
+  if (openT > 0) {
+    out.push({
+      level: 'info',
+      title: t('rem.tickets', { n: openT }),
+      sub: t('rem.ticketsSub'),
+      whenLabel: '',
+      sort: 9000
+    });
+  }
+  return out.sort((a, b) => a.sort - b.sort);
+}
+
+function getStressParams() {
+  return {
+    vacancy: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_vacancy_pct') || '0') || 0)),
+    rentDown: Math.min(40, Math.max(0, parseFloat(DB.getVal('stress_rent_down_pct') || '0') || 0)),
+    expenseUp: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_expense_up_pct') || '0') || 0)),
+    cicilanUp: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_cicilan_up_pct') || '0') || 0))
+  };
+}
+
+function renderStressTest() {
+  const container = document.getElementById('stress-content');
+  if (!container) return;
+  const units = getUnits(), payments = getPayments();
+  const props = [...new Set(units.map(u => u.property))];
+  const { vacancy, rentDown, expenseUp, cicilanUp } = getStressParams();
+  const cy = getYear();
+  const rentM = 1 - rentDown / 100;
+  const vacM = 1 - vacancy / 100;
+  const expM = 1 + expenseUp / 100;
+  const cicM = 1 + cicilanUp / 100;
+
+  if (!props.length) {
+    container.innerHTML = '<p class="empty-state">' + t('stress.empty') + '</p>';
+    return;
+  }
+
+  let rows = '';
+  let sumBase = 0, sumStress = 0;
+  props.forEach(prop => {
+    const pu = units.filter(u => u.property === prop);
+    const pd = getPropertyData(prop);
+    const monthlyRent = pu.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+    const recordedExpense = payments.filter(p => p.propertyName === prop && p.type === 'expense' && p.period.startsWith(cy)).reduce((s, p) => s + p.amount, 0);
+    const unitsCost = getAllUnitsAnnualCost(pu);
+    const fixedCosts = getPropertyAnnualCost(pd);
+    const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
+    const cicilan = pd.cicilanPerBulan || 0;
+    const baseMo = monthlyRent - totalAnnualExpense / 12 - cicilan;
+    const adjRent = monthlyRent * rentM * vacM;
+    const adjExp = (totalAnnualExpense / 12) * expM;
+    const adjCic = cicilan * cicM;
+    const stressMo = adjRent - adjExp - adjCic;
+    sumBase += baseMo;
+    sumStress += stressMo;
+    rows += `<tr><td style="font-weight:700">${escapeHtml(prop)}</td><td>${formatRp(Math.round(baseMo))}</td><td style="color:${stressMo >= baseMo ? 'var(--success)' : 'var(--danger)'};font-weight:700">${formatRp(Math.round(stressMo))}</td><td>${stressMo >= baseMo ? '+' : ''}${formatRp(Math.round(stressMo - baseMo))}</td></tr>`;
+  });
+
+  container.innerHTML = `
+    ${explanationToggleBtn()}
+    <div class="card">
+      <h3 class="card-title">${t('stress.title')}</h3>
+      <p class="yield-cap-micro">${t('stress.blurb')}</p>
+      <div class="stress-sliders" style="margin-top:16px">
+        <label class="stress-slider-row">
+          <span>${t('stress.vacancy')}</span>
+          <input type="range" min="0" max="40" value="${vacancy}" oninput="DB.setVal('stress_vacancy_pct',this.value);document.getElementById('sv-v').textContent=this.value+'%';renderStressTest();">
+          <span id="sv-v" class="stress-val">${vacancy}%</span>
+        </label>
+        <label class="stress-slider-row">
+          <span>${t('stress.rentDown')}</span>
+          <input type="range" min="0" max="30" value="${rentDown}" oninput="DB.setVal('stress_rent_down_pct',this.value);document.getElementById('sv-r').textContent=this.value+'%';renderStressTest();">
+          <span id="sv-r" class="stress-val">${rentDown}%</span>
+        </label>
+        <label class="stress-slider-row">
+          <span>${t('stress.expUp')}</span>
+          <input type="range" min="0" max="40" value="${expenseUp}" oninput="DB.setVal('stress_expense_up_pct',this.value);document.getElementById('sv-e').textContent=this.value+'%';renderStressTest();">
+          <span id="sv-e" class="stress-val">${expenseUp}%</span>
+        </label>
+        <label class="stress-slider-row">
+          <span>${t('stress.cicilan')}</span>
+          <input type="range" min="0" max="30" value="${cicilanUp}" oninput="DB.setVal('stress_cicilan_up_pct',this.value);document.getElementById('sv-c').textContent=this.value+'%';renderStressTest();">
+          <span id="sv-c" class="stress-val">${cicilanUp}%</span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="card-title">${t('stress.resultTitle')}</h3>
+      <div class="yield-compare-table"><table class="compare-table">
+        <thead><tr><th>${t('stress.colProp')}</th><th>${t('stress.colNow')}</th><th>${t('stress.colScenario')}</th><th>${t('stress.colDelta')}</th></tr></thead>
+        <tbody>${rows}
+        <tr style="font-weight:800;background:var(--primary-glow)"><td>${t('stress.total')}</td><td>${formatRp(Math.round(sumBase))}</td><td>${formatRp(Math.round(sumStress))}</td><td>${sumStress >= sumBase ? '+' : ''}${formatRp(Math.round(sumStress - sumBase))}</td></tr>
+        </tbody></table></div>
+    </div>`;
+}
+
+function renderInvestorInsight() {
+  const container = document.getElementById('insight-content');
+  if (!container) return;
+  const tenants = getTenants(), history = getTenantHistory(), units = getUnits();
+  const tickets = getMaintenanceTickets();
+
+  const vacSamples = tenants.map(tn => tn.vacancyDaysBeforeMoveIn).filter(v => v != null && v >= 0);
+  const vacAvg = vacSamples.length ? Math.round(vacSamples.reduce((a, b) => a + b, 0) / vacSamples.length) : null;
+
+  const byYear = {};
+  history.forEach(h => {
+    const y = new Date(h.archivedAt).getFullYear();
+    byYear[y] = (byYear[y] || 0) + 1;
+  });
+  const churnRows = Object.keys(byYear).sort((a, b) => b - a).map(y =>
+    `<tr><td>${y}</td><td>${t('insight.churnRow', { n: byYear[y] })}</td></tr>`).join('') || `<tr><td colspan="2" class="empty-state">${t('insight.churnEmpty')}</td></tr>`;
+
+  let rentRows = '';
+  units.forEach(u => {
+    const rh = Array.isArray(u.rentHistory) ? u.rentHistory : [];
+    rh.forEach(entry => {
+      rentRows += `<tr><td>${escapeHtml(u.property)} — ${escapeHtml(u.name)}</td><td>${formatDate(entry.at?.slice(0, 10) || '')}</td><td>${formatRpFull(entry.price)}/${entry.billingCycle === 'yearly' ? t('period.yr') : t('period.mo')}</td></tr>`;
+    });
+  });
+  if (!rentRows) rentRows = `<tr><td colspan="3" class="empty-state">${t('insight.rentEmpty')}</td></tr>`;
+
+  const rem = collectBusinessReminders(90, 120);
+  const remHtml = rem.length ? rem.map(r =>
+    `<div class="biz-cal-row ${r.level}"><span class="biz-cal-dot"></span><div><div class="biz-cal-title">${escapeHtml(r.title)}</div><div class="biz-cal-sub">${escapeHtml(r.sub)}</div></div><span class="biz-cal-when">${escapeHtml(r.whenLabel)}</span></div>`).join('')
+    : '<p class="empty-state">' + t('dash.calEmpty') + '</p>';
+
+  const tickRows = tickets.slice().reverse().map(tk => {
+    const st = tk.status === 'done' ? '✅' : '🔧';
+    const u = tk.unitId ? units.find(x => x.id === tk.unitId) : null;
+    const loc = u ? escapeHtml(u.property + ' — ' + u.name) : escapeHtml(tk.propertyName || '-');
+    return `<tr><td>${st}</td><td>${escapeHtml(tk.title || '-')}</td><td>${loc}</td><td>${tk.cost ? formatRp(tk.cost) : '-'}</td>
+      <td><button type="button" class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="toggleMaintenanceStatus(${onclickStrArg(tk.id)})">${tk.status === 'done' ? t('insight.ticketReopen') : t('insight.ticketDone')}</button>
+      <button type="button" class="btn btn-danger" style="padding:4px 8px;font-size:11px;margin-left:4px" onclick="deleteMaintenanceTicket(${onclickStrArg(tk.id)})">×</button></td></tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="card">
+      <h3 class="card-title">${t('insight.reminders')}</h3>
+      <p class="yield-cap-micro">${t('insight.remHint')}</p>
+      <div class="biz-cal-list" style="margin-top:12px">${remHtml}</div>
+    </div>
+    <div class="card">
+      <h3 class="card-title">${t('insight.tickets')}</h3>
+      <p class="yield-cap-micro">${t('insight.ticketHint')}</p>
+      <div class="yield-compare-table" style="margin-top:12px"><table class="compare-table">
+        <thead><tr><th></th><th>${t('insight.tCol1')}</th><th>${t('insight.tCol2')}</th><th>${t('insight.tCol3')}</th><th></th></tr></thead>
+        <tbody>${tickRows || `<tr><td colspan="5" class="empty-state">${t('insight.tEmpty')}</td></tr>`}</tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="card-title">${t('insight.churn')}</h3>
+      <div class="yield-compare-table"><table class="compare-table">
+        <thead><tr><th>${t('insight.year')}</th><th>${t('insight.churnCol')}</th></tr></thead>
+        <tbody>${churnRows}</tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="card-title">${t('insight.vacancy')}</h3>
+      <p class="yield-cap-micro">${t('insight.vacHint')}</p>
+      <p style="font-size:28px;font-weight:800;color:var(--primary);margin:12px 0 2px">${vacAvg != null ? vacAvg + ' ' + t('insight.daysSuffix') : '—'}</p>
+      <p style="font-size:12px;color:var(--text-muted)">${vacAvg != null ? t('insight.vacSub', { n: vacSamples.length }) : t('insight.vacNoData')}</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">${t('insight.rentHist')}</h3>
+      <p class="yield-cap-micro">${t('insight.rentHint')}</p>
+      <div class="yield-compare-table" style="margin-top:12px"><table class="compare-table">
+        <thead><tr><th>${t('insight.rentColUnit')}</th><th>${t('insight.rentColDate')}</th><th>${t('insight.rentColOld')}</th></tr></thead>
+        <tbody>${rentRows}</tbody></table></div>
+    </div>`;
+}
+
+function showMaintenanceForm() {
+  const units = getUnits();
+  const props = [...new Set(units.map(u => u.property))];
+  openModal(t('ticket.title'), `
+    <form onsubmit="saveMaintenanceTicket(event)">
+      <div class="form-group"><label class="form-label">${t('form.ticketTitle')}</label>
+        <input class="form-input" name="title" required placeholder="${t('form.ticketTitlePh')}"></div>
+      <div class="form-group"><label class="form-label">${t('form.property')}</label>
+        <select class="form-select" name="propertyName" id="mt-prop" onchange="onMaintenancePropChange(this.value)">
+          <option value="">${t('form.propGeneral')}</option>
+          ${props.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('')}
+        </select></div>
+      <div class="form-group"><label class="form-label">${t('form.unitOpt')}</label>
+        <select class="form-select" name="unitId" id="mt-unit"><option value="">—</option>
+          ${units.map(u => `<option value="${u.id}" data-prop="${escapeHtml(u.property)}">${escapeHtml(u.property)} — ${escapeHtml(u.name)}</option>`).join('')}
+        </select></div>
+      <div class="form-group"><label class="form-label">${t('form.costEst')}</label>
+        <input class="form-input" name="cost" type="text" data-rp inputmode="numeric" placeholder="0"></div>
+      <div class="form-group"><label class="form-label">${t('form.notes')}</label>
+        <textarea class="form-textarea" name="notes"></textarea></div>
+      <button type="submit" class="btn btn-primary">${t('form.ticketSave')}</button>
+    </form>
+  `);
+  setTimeout(() => initRpInputs(), 50);
+}
+
+function onMaintenancePropChange(prop) {
+  const sel = document.getElementById('mt-unit');
+  if (!sel) return;
+  for (const o of sel.options) {
+    if (!o.value) { o.hidden = false; continue; }
+    o.hidden = !!(prop && o.dataset.prop !== prop);
+  }
+  sel.value = '';
+}
+
+function saveMaintenanceTicket(e) {
+  e.preventDefault();
+  const f = e.target;
+  const list = getMaintenanceTickets();
+  list.push({
+    id: DB.genId(),
+    title: f.title.value.trim(),
+    propertyName: f.propertyName.value.trim(),
+    unitId: f.unitId.value || '',
+    cost: parseNum(f.cost.value) || 0,
+    notes: f.notes.value.trim(),
+    status: 'open',
+    createdAt: new Date().toISOString()
+  });
+  saveMaintenanceTickets(list);
+  closeModal();
+  refreshCurrentPage();
+  showToast(t('msg.ticketSaved'), 'success');
+}
+
+function toggleMaintenanceStatus(id) {
+  const list = getMaintenanceTickets();
+  const tk = list.find(x => x.id === id);
+  if (!tk) return;
+  tk.status = tk.status === 'done' ? 'open' : 'done';
+  tk.completedAt = tk.status === 'done' ? new Date().toISOString() : '';
+  saveMaintenanceTickets(list);
+  refreshCurrentPage();
+}
+
+function deleteMaintenanceTicket(id) {
+  if (!confirm(t('confirm.deleteTicket'))) return;
+  saveMaintenanceTickets(getMaintenanceTickets().filter(x => x.id !== id));
+  refreshCurrentPage();
 }
 
 // ===== CHARTS =====
@@ -3684,6 +4198,8 @@ function renderCharts() {
 
   const payments = getPayments();
   const units = getUnits();
+  const tenants = getTenants();
+  const tenantHistory = getTenantHistory();
   const now = new Date();
 
   // 1. Income Trend (last 6 months)
@@ -3691,7 +4207,7 @@ function renderCharts() {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = getMonthYear(d);
-    const label = d.toLocaleDateString('id-ID', { month: 'short' });
+    const label = d.toLocaleDateString(dateLocaleTag(), { month: 'short' });
     const value = payments.filter(p => p.period === key && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
     months6.push({ label, value });
   }
@@ -3702,7 +4218,7 @@ function renderCharts() {
     const cat = p.expenseCategory || 'other';
     expByCat[cat] = (expByCat[cat] || 0) + p.amount;
   });
-  const donutData = EXPENSE_CATEGORIES.filter(c => expByCat[c.id]).map(c => ({ label: c.icon + ' ' + c.label, value: expByCat[c.id] }));
+  const donutData = EXPENSE_CATEGORIES.filter(c => expByCat[c.id]).map(c => ({ label: getExpenseCategoryLabel(c.id), value: expByCat[c.id] }));
 
   // 3. Profit per Property (bar chart)
   const props = [...new Set(units.map(u => u.property))];
@@ -3712,23 +4228,25 @@ function renderCharts() {
     return { label: prop, values: [inc, exp] };
   });
 
-  // 4. Occupancy Trend
+  // 4. Occupancy trend from lease dates (active tenants + archived contracts), not bill proxy
   const totalUnits = units.length || 1;
   const occData = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = getMonthYear(d);
-    const label = d.toLocaleDateString('id-ID', { month: 'short' });
-    const occCount = new Set(payments.filter(p => p.period === key && p.type === 'income').map(p => p.tenantId)).size;
+    const label = d.toLocaleDateString(dateLocaleTag(), { month: 'short' });
+    const occCount = occupiedUnitsByLeasesAtMonth(units, tenants, tenantHistory, key);
     const rate = Math.min(Math.round((occCount / totalUnits) * 100), 100);
     occData.push({ label, value: rate });
   }
 
   container.innerHTML = `
-    <div class="card"><h3 class="card-title">📈 Tren Pemasukan (6 Bulan)</h3>${svgLineChart(months6, { color: 'var(--success)' })}</div>
-    <div class="card"><h3 class="card-title">🍩 Pengeluaran per Kategori</h3>${svgDonutChart(donutData)}</div>
-    <div class="card"><h3 class="card-title">📊 Income vs Expense per Properti</h3>${svgBarChart(barData, { colors: ['var(--success)', 'var(--danger)'], labels: ['Income', 'Expense'] })}</div>
-    <div class="card"><h3 class="card-title">📉 Tren Occupancy (6 Bulan)</h3>${svgLineChart(occData, { color: 'var(--primary)' })}</div>
+    <div class="card"><h3 class="card-title">${t('charts.income6')}</h3>${svgLineChart(months6, { color: 'var(--success)' })}</div>
+    <div class="card"><h3 class="card-title">${t('charts.expCat')}</h3>${svgDonutChart(donutData)}</div>
+    <div class="card"><h3 class="card-title">${t('charts.incVsExp')}</h3>${svgBarChart(barData, { colors: ['var(--success)', 'var(--danger)'], labels: [t('charts.incomeLbl'), t('charts.expenseLbl')] })}</div>
+    <div class="card"><h3 class="card-title">${t('charts.occ6')}</h3>
+      <p class="yield-cap-micro">${t('charts.occNote')}</p>
+      ${svgLineChart(occData, { color: 'var(--primary)' })}</div>
   `;
 }
 
@@ -3750,13 +4268,15 @@ function explanationToggleBtn() {
   const hidden = isExplanationsHidden();
   return `<div style="text-align:right;margin-bottom:8px">
     <button class="btn-explain-toggle" onclick="toggleExplanations()">
-      ${hidden ? '💡 Tampilkan penjelasan' : '🙈 Sembunyikan penjelasan'}
+      ${hidden ? t('explain.show') : t('explain.hide')}
     </button>
   </div>`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initLocale === 'function') initLocale();
   applyUiMode();
+  syncPageTitle();
   applyExplanationPref();
   // Apply saved theme
   setTheme(getTheme());
@@ -3771,7 +4291,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeBtn.className = 'theme-toggle';
         themeBtn.setAttribute('onclick', 'toggleTheme()');
         themeBtn.id = 'theme-toggle-btn';
-        themeBtn.title = 'Dark/Light Mode';
+        themeBtn.title = typeof t === 'function' ? t('theme.toggle') : 'Dark/Light Mode';
         themeBtn.textContent = getTheme() === 'dark' ? '\u2600\uFE0F' : '\u{1F319}';
         settingsBtn.parentNode.insertBefore(themeBtn, settingsBtn);
       }
@@ -3780,6 +4300,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateOverduePayments();
   renderDashboard();
+  if (!document.getElementById('dash-biz-cal')) {
+    console.warn('[PropertiKu] #dash-biz-cal missing — index.html or cache may be stale. Hard refresh, or open via serve script and close other app tabs.');
+  } else {
+    console.info('[PropertiKu] Business calendar card is present below the green banner (jump button available).');
+  }
   // Auto-send Telegram reminder if needed
   autoReminderCheck();
   // Show onboarding for first-time users

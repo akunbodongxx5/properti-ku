@@ -195,6 +195,45 @@ body {
 }
 .btn-icon:active { transform: scale(0.95); }
 
+/* ===== Language toggle (EN / ID) ===== */
+.lang-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-right: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.lang-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease, color 0.15s ease;
+  font-family: inherit;
+}
+.lang-seg:hover { background: var(--primary-glow); color: var(--text-primary); }
+.lang-seg:active { transform: scale(0.96); }
+.lang-seg.lang-seg-active {
+  background: var(--primary-glow);
+  color: var(--primary-dark);
+  box-shadow: inset 0 0 0 1px var(--primary-light);
+}
+
 /* ===== Main ===== */
 .main { padding: 20px 16px; padding-bottom: 100px; }
 .page { display: none; }
@@ -1138,3 +1177,115 @@ body {
 /* ===== Stat number animation ===== */
 .stat-animate { animation: statPop 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes statPop { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+
+/* ===== Stress test sliders ===== */
+.stress-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+.stress-slider-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 42%) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.stress-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+}
+.stress-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--primary);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ===== Business calendar / reminders ===== */
+.biz-cal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.biz-cal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.biz-cal-row.dash {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.biz-cal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+.biz-cal-row.soon .biz-cal-dot { background: var(--warning-dark); }
+.biz-cal-row.urgent .biz-cal-dot { background: var(--danger); }
+.biz-cal-row.info .biz-cal-dot { background: var(--info); }
+.biz-cal-title { font-weight: 700; color: var(--text); font-size: 13px; }
+.biz-cal-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.biz-cal-when {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.dash-cal-more { margin-top: 10px; }
+.btn-link-cal {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.btn-link-cal:hover { color: var(--primary-dark); }
+
+/* Dashboard — Kalender bisnis (mudah ditemukan) */
+#dash-biz-cal { scroll-margin-top: 96px; }
+.dash-biz-cal-card {
+  border: 1px solid var(--primary);
+  box-shadow: 0 4px 20px var(--primary-glow);
+  background: linear-gradient(180deg, var(--primary-glow) 0%, var(--bg-card) 48%);
+}
+.dash-biz-cal-hint {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin: -4px 0 10px;
+  font-weight: 500;
+}
+.biz-cal-empty { font-size: 14px; line-height: 1.5; padding: 20px 12px !important; color: var(--text-secondary); }
+.biz-cal-empty strong { color: var(--text); display: block; margin-bottom: 6px; }
+.greeting-cal-jump {
+  margin-top: 14px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-xs);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.greeting-cal-jump:active { transform: scale(0.98); opacity: 0.95; }

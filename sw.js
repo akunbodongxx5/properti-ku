@@ -1,10 +1,11 @@
 // Bump this + query ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
-const CACHE_NAME = 'propertiKu-v7';
+const CACHE_NAME = 'propertiKu-v17';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=7',
-  './styles.css?v=7',
+  './i18n.js?v=17',
+  './app.js?v=17',
+  './styles.css?v=17',
   './manifest.json',
   './icon.svg',
   './icon-192.png',
@@ -39,25 +40,37 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch — network-first, fallback to cache (ensures updates are picked up)
+// Fetch — HTML/navigate: selalu revalidate (hindari Beranda tampil versi index lama tanpa kartu Kalender).
+// Aset lain: network-first + update cache.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  if (url.origin === location.origin) {
+  if (url.origin !== location.origin) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+
+  const isHtmlShell =
+    e.request.mode === 'navigate' ||
+    (e.request.method === 'GET' &&
+      (url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('index.html')));
+
+  if (isHtmlShell) {
     e.respondWith(
-      fetch(e.request).then((response) => {
-        // Update cache with fresh response
+      fetch(e.request, { cache: 'no-cache' }).then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
         return response;
-      }).catch(() => {
-        // Offline fallback to cache
-        return caches.match(e.request);
-      })
+      }).catch(() => caches.match(e.request))
     );
-  } else {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
-    );
+    return;
   }
+
+  e.respondWith(
+    fetch(e.request).then((response) => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+      return response;
+    }).catch(() => caches.match(e.request))
+  );
 });
