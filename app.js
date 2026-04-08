@@ -3899,41 +3899,13 @@ function nextAnnualOccurrenceDate(month1to12, dayOfMonth) {
 
 function collectBusinessReminders(contractDays = 60, permitDays = 90) {
   const out = [];
-  const tenants = getTenants();
-  tenants.forEach(tenant => {
+  getTenants().forEach(tenant => {
     const dl = daysUntil(tenant.endDate);
     if (dl >= 0 && dl <= contractDays) {
       out.push({
         level: dl <= 14 ? 'urgent' : 'soon',
         title: t('rem.contract', { name: tenant.name }),
         sub: t('rem.contractSub', { date: formatDate(tenant.endDate) }),
-        whenLabel: dl === 0 ? t('rem.today') : t('rem.days', { n: dl }),
-        sort: dl
-      });
-    }
-  });
-  getPayments().forEach(p => {
-    if (p.type !== 'income') return;
-    if (p.status !== 'pending' && p.status !== 'overdue') return;
-    if (!p.dueDate) return;
-    const dl = daysUntil(p.dueDate);
-    const tn = tenants.find(x => x.id === p.tenantId);
-    const name = tn?.name || t('dash.expenseLbl');
-    if (p.status === 'overdue' || dl < 0) {
-      out.push({
-        level: 'urgent',
-        title: t('rem.rentDue', { name }),
-        sub: t('rem.rentDueSub', { amount: formatRp(p.amount), prop: p.propertyName || '—' }),
-        whenLabel: t('rem.lateBy', { n: Math.abs(dl) }),
-        sort: -500 + dl
-      });
-      return;
-    }
-    if (dl >= 0 && dl <= contractDays) {
-      out.push({
-        level: dl <= 7 ? 'urgent' : 'soon',
-        title: t('rem.rentDue', { name }),
-        sub: t('rem.rentDueSub', { amount: formatRp(p.amount), prop: p.propertyName || '—' }),
         whenLabel: dl === 0 ? t('rem.today') : t('rem.days', { n: dl }),
         sort: dl
       });
