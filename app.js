@@ -1426,14 +1426,22 @@ function showPaymentForm(editId) {
         <select class="form-select" name="tenantId"><option value="">${t('form.pick')}</option>
           ${tenants.map(tn=>{const u=units.find(x=>x.id===tn.unitId);return`<option value="${tn.id}" ${p?.tenantId===tn.id?'selected':''}>${tn.name} (${u?u.name:'-'})</option>`;}).join('')}</select></div>
       <div class="form-group" id="fg-property"><label class="form-label">${t('form.property')}</label>
-        <select class="form-select" name="propertyName"><option value="">${t('form.pick')}</option>
+        <select class="form-select" name="propertyName" onchange="applyPbbAmountFromProperty(this.form)"><option value="">${t('form.pick')}</option>
           ${[...new Set(units.map(u=>u.property))].map(pr=>`<option value="${pr}" ${p?.propertyName===pr?'selected':''}>${pr}</option>`).join('')}</select></div>
       <div class="form-group" id="fg-expense-category" style="display:none"><label class="form-label">${t('form.expenseCat')}</label>
-        <select class="form-select" name="expenseCategory">
+        <select class="form-select" name="expenseCategory" onchange="updatePbbLinkRow()">
           ${EXPENSE_CATEGORIES.map(c=>`<option value="${c.id}" ${expCat===c.id?'selected':''}>${getExpenseCategoryLabel(c.id)}</option>`).join('')}</select></div>
       <div class="form-group" id="fg-expense-unit" style="display:none"><label class="form-label">${t('form.expenseUnit')}</label>
         <select class="form-select" name="expenseUnitId"><option value="">${t('form.expenseUnitAll')}</option>
           ${units.map(u=>`<option value="${u.id}" ${p?.expenseUnitId===u.id?'selected':''}>${u.property} — ${u.name}</option>`).join('')}</select></div>
+      <div class="form-group" id="fg-pbb-link" style="display:none">
+        <label class="form-label">${t('form.pbbLinkLabel')}</label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:400;line-height:1.45">
+          <input type="checkbox" name="expensePbbFromProperty" value="1" ${p?.expensePbbFromProperty ? 'checked' : ''} style="margin-top:3px;flex-shrink:0" onchange="applyPbbAmountFromProperty(this.form)">
+          <span>${t('form.pbbLinkHint')}</span>
+        </label>
+        <small style="color:var(--text-muted);font-size:12px;display:block;margin-top:8px;line-height:1.45">${t('form.pbbLinkMicro')}</small>
+      </div>
       <div class="form-group"><label class="form-label">${t('form.amount')}</label>
         <input class="form-input" name="amount" type="text" inputmode="numeric" data-rp required placeholder="1.500.000" value="${p?.amount ? formatNumDots(p.amount) : ''}"></div>
       <div class="form-group"><label class="form-label">${t('form.period')}</label>
@@ -1451,7 +1459,31 @@ function showPaymentForm(editId) {
     </form>
     <script>togglePaymentFields('${p?.type||'income'}')<\/script>
   `);
-  setTimeout(() => initRpInputs(), 50);
+  setTimeout(() => { initRpInputs(); updatePbbLinkRow(); }, 50);
+}
+
+/** Tampilkan opsi hubung PBB pengeluaran ↔ pengaturan properti (kategori Pajak saja). */
+function updatePbbLinkRow() {
+  const form = document.querySelector('#modal-overlay form');
+  if (!form || !form.type) return;
+  const row = document.getElementById('fg-pbb-link');
+  if (!row) return;
+  const cat = form.expenseCategory?.value;
+  const show = form.type.value === 'expense' && cat === 'tax';
+  row.style.display = show ? 'block' : 'none';
+  if (!show && form.expensePbbFromProperty) form.expensePbbFromProperty.checked = false;
+}
+
+/** Isi field jumlah dari PBB/tahun properti jika centang "dari pengaturan properti". */
+function applyPbbAmountFromProperty(form) {
+  if (!form) return;
+  const cb = form.expensePbbFromProperty;
+  const pr = form.propertyName?.value;
+  const amt = form.amount;
+  if (!cb || !cb.checked || !pr) return;
+  const pd = getPropertyData(pr);
+  const v = pd.pbb || 0;
+  if (amt) amt.value = formatNumDots(v);
 }
 
 function togglePaymentFields(type) {
@@ -1461,6 +1493,7 @@ function togglePaymentFields(type) {
   if (b) b.style.display = type==='expense'?'block':'none';
   if (c) c.style.display = type==='expense'?'block':'none';
   if (d) d.style.display = type==='expense'?'block':'none';
+  updatePbbLinkRow();
 }
 
 function savePayment(e, editId) {
@@ -1475,6 +1508,7 @@ function savePayment(e, editId) {
     status: f.status.value, description: f.description.value.trim(),
     expenseCategory: type==='expense' ? (f.expenseCategory?.value || 'other') : '',
     expenseUnitId: type==='expense' ? (f.expenseUnitId?.value || '') : '',
+    expensePbbFromProperty: type === 'expense' && (f.expenseCategory?.value === 'tax') && !!(f.expensePbbFromProperty && f.expensePbbFromProperty.checked),
     createdAt: editId?(getPayments().find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
   };
   if (data.status==='pending' && daysUntil(data.dueDate)<0) data.status='overdue';
@@ -1527,7 +1561,7 @@ function paymentRowHtml(p, tenants) {
         ${toggleBtn}
         <div style="flex:1;min-width:0">
           <div class="list-item-header"><span class="list-item-title">${isExp ? escapeHtml(getExpenseCategoryLabel(p.expenseCategory || 'other')) : '💰'} ${isExp ? '' : escapeHtml(tn?.name || t('pay.tenantWord'))}</span><span class="badge ${st.b}">${st.l}</span></div>
-          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || t('pay.rentFallback', { period: p.period }))}</div>
+          <div class="list-item-subtitle">${escapeHtml(p.propertyName || '-')} · ${escapeHtml(p.description || t('pay.rentFallback', { period: p.period }))}${isExp && p.expenseCategory === 'tax' && p.expensePbbFromProperty ? ' · ' + escapeHtml(t('pay.pbbLinkTag')) : ''}</div>
           <div class="list-item-row" style="margin-top:6px">
             <span class="list-item-detail" style="color:${dueColor};font-weight:600">${dueLabel}</span>
             <span style="font-weight:800;font-size:15px;color:${isExp ? 'var(--danger)' : 'var(--success)'}">${isExp ? '-' : '+'}${formatRpFull(p.amount)}</span>
