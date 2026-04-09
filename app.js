@@ -1589,6 +1589,8 @@ function paymentGroupBadgeRow(items) {
 }
 
 function paymentGroupDefaultOpen(items) {
+  // Semua: default tertutup per grup (nama) supaya daftar tidak “rame”; user buka manual.
+  if (paymentFilter === 'all') return false;
   if (paymentFilter === 'paid' || paymentFilter === 'pending' || paymentFilter === 'overdue') return true;
   return items.some(p => p.status === 'pending' || p.status === 'overdue');
 }
@@ -1617,6 +1619,7 @@ function renderPayments() {
   const filtered = paymentFilter === 'all' ? payments : payments.filter(p => p.status === paymentFilter);
   const sorted = [...filtered].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   const container = document.getElementById('payment-list');
+  if (!container) return;
 
   document.querySelectorAll('.payment-view-tabs .filter-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.payView === paymentViewMode);
