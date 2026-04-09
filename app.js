@@ -341,10 +341,16 @@ function dismissOnboarding() {
 
 // ===== FAB =====
 function toggleFabMenu() {
-  ['fab-main','fab-menu','fab-backdrop'].forEach(id => document.getElementById(id).classList.toggle('open'));
+  ['fab-main', 'fab-menu', 'fab-backdrop'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('open');
+  });
 }
 function closeFabMenu() {
-  ['fab-main','fab-menu','fab-backdrop'].forEach(id => document.getElementById(id).classList.remove('open'));
+  ['fab-main', 'fab-menu', 'fab-backdrop'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  });
 }
 
 // ===== Navigation =====
@@ -1788,11 +1794,13 @@ let reportPeriod = 'month';
 let reportTab = 'overview';
 
 function switchReportTab(tab, btn) {
+  const panel = document.getElementById(`rpt-tab-${tab}`);
+  if (!panel) return;
   reportTab = tab;
-  document.querySelectorAll('#page-reports > .filter-tabs.ui-pro-only .filter-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#page-reports > .filter-tabs.ui-pro-only .filter-tab').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.querySelectorAll('.rpt-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById(`rpt-tab-${tab}`).classList.add('active');
+  document.querySelectorAll('.rpt-tab').forEach(t => t.classList.remove('active'));
+  panel.classList.add('active');
   renderReports();
 }
 
@@ -1802,15 +1810,16 @@ function openReportTab(tab) {
     navigateTo('reports');
     return;
   }
+  const panel = document.getElementById(`rpt-tab-${tab}`);
+  if (!panel) return;
   reportTab = tab;
   navigateTo('reports');
   document.querySelectorAll('#page-reports > .filter-tabs.ui-pro-only .filter-tab').forEach(t => {
     t.classList.remove('active');
-    if ((t.getAttribute('onclick') || '').includes(`'${tab}'`)) t.classList.add('active');
+    if (t.getAttribute('data-report-tab') === tab) t.classList.add('active');
   });
   document.querySelectorAll('#page-reports .rpt-tab').forEach(t => t.classList.remove('active'));
-  const panel = document.getElementById(`rpt-tab-${tab}`);
-  if (panel) panel.classList.add('active');
+  panel.classList.add('active');
 }
 
 function changeReportPeriod(p, btn) {

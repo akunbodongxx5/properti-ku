@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body>
   <script>
@@ -131,15 +131,15 @@
         <!-- Sub-tabs for reports -->
         <p class="reports-simple-tip" data-i18n-html="reports.simpleTip">Versi sederhana: ringkasan keuangan saja. Untuk analisis sewa + kenaikan harga, KPR, dan grafik, buka <strong>Pengaturan → Pro</strong>.</p>
         <div class="filter-tabs ui-pro-only">
-          <button class="filter-tab active" onclick="switchReportTab('overview', this)" data-i18n="rpt.overview">Ringkasan</button>
-          <button class="filter-tab" onclick="switchReportTab('yield', this)" data-i18n="rpt.yield">Yield</button>
-          <button class="filter-tab" onclick="switchReportTab('proyeksi', this)" data-i18n="rpt.projection">Proyeksi</button>
-          <button class="filter-tab" onclick="switchReportTab('stress', this)" data-i18n="rpt.stress">Simulasi risiko</button>
-          <button class="filter-tab" onclick="switchReportTab('analytics', this)" data-i18n="rpt.occupancy">Okupansi</button>
-          <button class="filter-tab" onclick="switchReportTab('multi', this)" data-i18n="rpt.byProperty">Per Properti</button>
-          <button class="filter-tab" onclick="switchReportTab('kpr', this)" data-i18n="rpt.kpr">KPR</button>
-          <button class="filter-tab" onclick="switchReportTab('charts', this)" data-i18n="rpt.charts">Grafik</button>
-          <button class="filter-tab" onclick="switchReportTab('insight', this)" data-i18n="rpt.ops">Operasional</button>
+          <button type="button" class="filter-tab active" data-report-tab="overview" onclick="switchReportTab('overview', this)" data-i18n="rpt.overview">Ringkasan</button>
+          <button type="button" class="filter-tab" data-report-tab="yield" onclick="switchReportTab('yield', this)" data-i18n="rpt.yield">Yield</button>
+          <button type="button" class="filter-tab" data-report-tab="proyeksi" onclick="switchReportTab('proyeksi', this)" data-i18n="rpt.projection">Proyeksi</button>
+          <button type="button" class="filter-tab" data-report-tab="stress" onclick="switchReportTab('stress', this)" data-i18n="rpt.stress">Simulasi risiko</button>
+          <button type="button" class="filter-tab" data-report-tab="analytics" onclick="switchReportTab('analytics', this)" data-i18n="rpt.occupancy">Okupansi</button>
+          <button type="button" class="filter-tab" data-report-tab="multi" onclick="switchReportTab('multi', this)" data-i18n="rpt.byProperty">Per Properti</button>
+          <button type="button" class="filter-tab" data-report-tab="kpr" onclick="switchReportTab('kpr', this)" data-i18n="rpt.kpr">KPR</button>
+          <button type="button" class="filter-tab" data-report-tab="charts" onclick="switchReportTab('charts', this)" data-i18n="rpt.charts">Grafik</button>
+          <button type="button" class="filter-tab" data-report-tab="insight" onclick="switchReportTab('insight', this)" data-i18n="rpt.ops">Operasional</button>
         </div>
 
         <!-- Overview Tab -->
@@ -275,11 +275,11 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="i18n.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="i18n.js?v=24"></script>
+  <script src="app.js?v=24"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=22').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=24').then((reg) => {
         reg.update();
         console.log('SW registered:', reg.scope);
       }).catch((err) => {
