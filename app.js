@@ -255,7 +255,17 @@ function paymentMatchesCalendarMonth(p, cm) {
   return false;
 }
 function getYear(d) { return d ? new Date(d).getFullYear().toString() : new Date().getFullYear().toString(); }
-function daysUntil(d) { const now = new Date(); now.setHours(0,0,0,0); const t = new Date(d); t.setHours(0,0,0,0); return Math.ceil((t-now)/(864e5)); }
+/** Selisih hari ke tanggal (kalender lokal). String YYYY-MM-DD diparse lewat parseYMD agar tidak geser UTC. */
+function daysUntil(d) {
+  if (d == null || d === '') return NaN;
+  const s = String(d).trim().slice(0, 10);
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(s) ? parseYMD(s) : new Date(d);
+  if (!t || isNaN(t.getTime())) return NaN;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  t.setHours(0, 0, 0, 0);
+  return Math.ceil((t - now) / 864e5);
+}
 function parseYMD(s) {
   if (!s) return null;
   const p = String(s).slice(0, 10).split('-');
@@ -3804,13 +3814,19 @@ async function sendTelegramReminder() {
   if (!cfg.token || !cfg.chatId) { alert(t('msg.tgSetupFirst')); return; }
 
   const payments = getPayments(), tenants = getTenants();
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const maxDue = new Date(today0);
+  maxDue.setDate(maxDue.getDate() + 30);
+
   const pending = payments.filter(p => {
     if (!((p.status === 'pending' || p.status === 'overdue') && p.type === 'income' && shouldIncludePaymentInReminders(p, tenants))) return false;
-    if (!p.dueDate) return false;
-    const d = daysUntil(p.dueDate);
-    if (isNaN(d)) return false;
-    /* Terlambat (d < 0) tetap ikut; yang jatuh tempo masih jauh (>30 hari) tidak ikut */
-    return d <= 30;
+    const du = parseYMD(String(p.dueDate || '').slice(0, 10));
+    if (!du) return false;
+    du.setHours(0, 0, 0, 0);
+    /* Hanya jatuh tempo ≤ hari ini + 30 hari (termasuk semua yang terlambat) */
+    if (du.getTime() > maxDue.getTime()) return false;
+    return true;
   });
 
   if (!pending.length) { alert(t('msg.tgNoBillsManualReminder')); return; }
@@ -3820,9 +3836,10 @@ async function sendTelegramReminder() {
     const tn = tenants.find(x => x.id === p.tenantId);
     const d = daysUntil(p.dueDate);
     const status = d < 0 ? `⚠️ TERLAMBAT ${Math.abs(d)} hari` : `⏳ ${d} hari lagi`;
+    const periodLabel = p.dueDate ? getMonthYear(p.dueDate) : (p.period || '');
     msg += `👤 *${tn?.name || t('pay.tenantWord')}*\n`;
     msg += `📍 ${p.propertyName || '-'}\n`;
-    msg += `💰 ${formatRpFull(p.amount)} — ${p.description || t('pay.rentFallback', { period: p.period })}\n`;
+    msg += `💰 ${formatRpFull(p.amount)} — ${p.description || t('pay.rentFallback', { period: periodLabel })}\n`;
     msg += `📅 Jatuh tempo: ${formatDate(p.dueDate)} (${status})\n\n`;
   });
 
