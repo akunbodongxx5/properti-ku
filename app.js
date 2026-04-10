@@ -3804,10 +3804,16 @@ async function sendTelegramReminder() {
   if (!cfg.token || !cfg.chatId) { alert(t('msg.tgSetupFirst')); return; }
 
   const payments = getPayments(), tenants = getTenants();
-  const pending = payments.filter(p =>
-    (p.status === 'pending' || p.status === 'overdue') && p.type === 'income' && shouldIncludePaymentInReminders(p, tenants));
+  const pending = payments.filter(p => {
+    if (!((p.status === 'pending' || p.status === 'overdue') && p.type === 'income' && shouldIncludePaymentInReminders(p, tenants))) return false;
+    if (!p.dueDate) return false;
+    const d = daysUntil(p.dueDate);
+    if (isNaN(d)) return false;
+    /* Terlambat (d < 0) tetap ikut; yang jatuh tempo masih jauh (>30 hari) tidak ikut */
+    return d <= 30;
+  });
 
-  if (!pending.length) { alert(t('msg.noPendingBills')); return; }
+  if (!pending.length) { alert(t('msg.tgNoBillsManualReminder')); return; }
 
   let msg = '🏠 *PropertiKu — Reminder Sewa*\n\n';
   pending.forEach(p => {
@@ -3928,7 +3934,8 @@ function showSettings() {
 
     <div id="tg-test-result" style="margin-bottom:12px"></div>
 
-    <button class="btn btn-success" onclick="sendTelegramReminder()" style="width:100%;margin-bottom:16px">${t('settings.sendNow')}</button>
+    <button class="btn btn-success" onclick="sendTelegramReminder()" style="width:100%;margin-bottom:8px">${t('settings.sendNow')}</button>
+    <small style="display:block;color:var(--text-muted);margin-bottom:16px;line-height:1.45">${t('settings.sendNowHint')}</small>
 
     <div class="yield-divider" style="margin:16px 0"></div>
     <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">${t('settings.backup')}</div>
