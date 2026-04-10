@@ -1,11 +1,40 @@
 // ===== PropertiKu — Property Rental Management App =====
 
 // ===== Data Layer =====
+function notifyStorageQuotaMaybe(err) {
+  const n = err && err.name;
+  if (n !== 'QuotaExceededError' && n !== 'NS_ERROR_DOM_QUOTA_REACHED') return;
+  const now = Date.now();
+  if (now - (window.__pkLastQuotaToast || 0) < 10000) return;
+  window.__pkLastQuotaToast = now;
+  queueMicrotask(() => {
+    const msg = typeof t === 'function' ? t('msg.storageFull') : 'Penyimpanan penuh. Kurangi data atau export lalu reset.';
+    if (typeof showToast === 'function') showToast(msg, 'error', 5000);
+    else alert(msg);
+  });
+}
+
 const DB = {
   get(key) { try { return JSON.parse(localStorage.getItem(`propertiKu_${key}`)) || []; } catch { return []; } },
-  set(key, data) { localStorage.setItem(`propertiKu_${key}`, JSON.stringify(data)); },
+  set(key, data) {
+    try {
+      localStorage.setItem(`propertiKu_${key}`, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      notifyStorageQuotaMaybe(e);
+      return false;
+    }
+  },
   getVal(key) { return localStorage.getItem(`propertiKu_${key}`) || ''; },
-  setVal(key, val) { localStorage.setItem(`propertiKu_${key}`, val); },
+  setVal(key, val) {
+    try {
+      localStorage.setItem(`propertiKu_${key}`, val);
+      return true;
+    } catch (e) {
+      notifyStorageQuotaMaybe(e);
+      return false;
+    }
+  },
   genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 };
 
@@ -17,6 +46,40 @@ function getUiMode() {
 }
 function isProMode() { return getUiMode() === 'pro'; }
 function isSimpleMode() { return getUiMode() === 'simple'; }
+
+/** Nama & sebutan di kartu sapaan Beranda (localStorage). */
+function getOwnerDisplayName() {
+  return (DB.getVal('owner_display_name') || '').trim();
+}
+function getOwnerTitle() {
+  return (DB.getVal('owner_title') || '').trim();
+}
+
+/** HTML aman untuk baris besar di bawah "Selamat …" (ganti "Investor!" / selamat datang). */
+function getDashboardGreetingSublineHtml() {
+  const name = getOwnerDisplayName().slice(0, 40);
+  const title = getOwnerTitle().slice(0, 32);
+  const nameEsc = escapeHtml(name);
+  const titleEsc = escapeHtml(title);
+  if (isSimpleMode()) {
+    if (name) return t('dash.welcomeNamed', { name: nameEsc });
+    return escapeHtml(t('dash.welcome'));
+  }
+  if (!name && !title) return escapeHtml(t('dash.investor'));
+  if (name && title) return `${titleEsc}, ${nameEsc}`;
+  if (name) return `${escapeHtml(t('dash.investorBare'))}, ${nameEsc}`;
+  return titleEsc;
+}
+
+function saveOwnerProfileFromSettings() {
+  const n = document.getElementById('settings-owner-name');
+  const tit = document.getElementById('settings-owner-title');
+  if (n) DB.setVal('owner_display_name', (n.value || '').trim().slice(0, 40));
+  if (tit) DB.setVal('owner_title', (tit.value || '').trim().slice(0, 32));
+  renderDashboard();
+  if (typeof showToast === 'function') showToast(t('toast.ownerSaved'), 'success', 2400);
+  showSettings();
+}
 function applyUiMode() {
   document.body.dataset.uiMode = getUiMode();
   const navLbl = document.getElementById('nav-reports-label');
@@ -327,6 +390,13 @@ function showOnboarding() {
         <div class="onboarding-step"><div class="onboarding-step-num">2</div><div class="onboarding-step-text">${t('onboard.s2')}</div></div>
         <div class="onboarding-step"><div class="onboarding-step-num">3</div><div class="onboarding-step-text">${t('onboard.s3')}</div></div>
       </div>
+      <div class="onboarding-owner-fields">
+        <label class="form-label" for="onboard-owner-name">${t('owner.nameAsk')}</label>
+        <input type="text" id="onboard-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}">
+        <label class="form-label" for="onboard-owner-title" style="margin-top:12px">${t('owner.titleAsk')}</label>
+        <input type="text" id="onboard-owner-title" class="form-input" maxlength="32" autocomplete="off" placeholder="${t('owner.titlePh')}">
+        <small class="onboarding-owner-hint">${t('owner.fieldsHint')}</small>
+      </div>
       <button class="onboarding-btn" onclick="dismissOnboarding()">${t('onboard.start')}</button>
       <button class="onboarding-btn-demo" onclick="loadDummyData()">${t('onboard.demo')}</button>
       <button class="onboarding-skip" onclick="dismissOnboarding()">${t('onboard.skip')}</button>
@@ -334,9 +404,14 @@ function showOnboarding() {
   document.body.appendChild(overlay);
 }
 function dismissOnboarding() {
+  const n = document.getElementById('onboard-owner-name');
+  const tit = document.getElementById('onboard-owner-title');
+  if (n) DB.setVal('owner_display_name', (n.value || '').trim().slice(0, 40));
+  if (tit) DB.setVal('owner_title', (tit.value || '').trim().slice(0, 32));
   DB.setVal('onboarded', '1');
   const el = document.getElementById('onboarding-overlay');
   if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s ease'; setTimeout(() => el.remove(), 300); }
+  renderDashboard();
 }
 
 // ===== FAB =====
@@ -1707,7 +1782,7 @@ function renderDashboard() {
   greet.innerHTML = `
     <div class="greeting-banner">
       <div class="greeting-text">${getGreeting()} 👋</div>
-      <div class="greeting-name">${simple ? t('dash.welcome') : t('dash.investor')}</div>
+      <div class="greeting-name">${getDashboardGreetingSublineHtml()}</div>
       <div class="quick-stats">
         <div class="quick-stat"><span class="quick-stat-value">${total}</span><span class="quick-stat-label">${t('stat.unit')}</span></div>
         <div class="quick-stat"><span class="quick-stat-value">${occupancy}%</span><span class="quick-stat-label">${simple ? t('stat.occPct') : t('stat.occ')}</span></div>
@@ -3357,6 +3432,15 @@ function showSettings() {
     </div>
 
     <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">${t('settings.ownerGreet')}</label>
+      <input type="text" id="settings-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}" value="${escapeHtml(getOwnerDisplayName())}">
+      <label class="form-label" style="margin-top:12px">${t('settings.ownerTitle')}</label>
+      <input type="text" id="settings-owner-title" class="form-input" maxlength="32" autocomplete="off" placeholder="${t('owner.titlePh')}" value="${escapeHtml(getOwnerTitle())}">
+      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.ownerHelp')}</small>
+      <button type="button" class="btn btn-primary" style="width:100%;margin-top:12px" onclick="saveOwnerProfileFromSettings()">${t('settings.saveGreet')}</button>
+    </div>
+
+    <div class="form-group" style="margin-bottom:20px">
       <label class="form-label">${t('settings.dark')}</label>
       <div style="display:flex;align-items:center;gap:12px">
         <label style="position:relative;display:inline-block;width:50px;height:28px;cursor:pointer">
@@ -3372,6 +3456,12 @@ function showSettings() {
       <label class="form-label">${t('settings.storage')}</label>
       <div style="font-size:13px;color:var(--text-secondary)">${getStorageUsage()}${t('settings.storageSub')}</div>
       <div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.min(parseFloat(getStorageUsage()) / 5 * 100, 100)}%;background:var(--primary);border-radius:3px"></div></div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">${t('settings.legal')}</label>
+      <button type="button" class="btn btn-outline" onclick="window.open('privacy.html','_blank','noopener')" style="width:100%">${t('settings.privacy')}</button>
+      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.privacyHint')}</small>
     </div>
 
     <div class="yield-divider" style="margin:16px 0"></div>
@@ -4396,4 +4486,8 @@ document.addEventListener('DOMContentLoaded', () => {
   autoReminderCheck();
   // Show onboarding for first-time users
   showOnboarding();
+
+  document.addEventListener('sw-register-failed', () => {
+    if (typeof showToast === 'function') showToast(typeof t === 'function' ? t('msg.swRegisterFail') : 'Service worker failed', 'warning', 4000);
+  });
 });

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d9488">
+  <title>Kebijakan Privasi — PropertiKu</title>
+  <link rel="stylesheet" href="styles.css?v=34">
+  <style>
+    .legal-wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 48px; }
+    .legal-wrap h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .legal-wrap .meta { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
+    .legal-wrap h2 { font-size: 1.1rem; margin: 28px 0 12px; }
+    .legal-wrap p, .legal-wrap li { line-height: 1.6; color: var(--text-secondary); font-size: 14px; }
+    .legal-wrap ul { padding-left: 1.25rem; }
+    .legal-back { display: inline-block; margin-bottom: 20px; color: var(--primary); font-weight: 600; text-decoration: none; }
+    .legal-back:hover { text-decoration: underline; }
+    .lang-divider { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+  </style>
+</head>
+<body>
+  <script>
+    try {
+      var th = localStorage.getItem('propertiKu_theme');
+      if (th === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+  </script>
+  <div class="legal-wrap">
+    <a class="legal-back" href="./index.html">← Kembali ke app</a>
+
+    <h1>Kebijakan Privasi</h1>
+    <p class="meta">PropertiKu — terakhir diperbarui: April 2026</p>
+
+    <p>PropertiKu adalah aplikasi manajemen properti sewaan yang berjalan di browser Anda (termasuk saat diinstal sebagai PWA). Kami merancang app agar data operasional utama Anda disimpan di perangkat Anda, bukan di server kami.</p>
+
+    <h2>Data yang disimpan di perangkat Anda</h2>
+    <p>Data seperti unit, penyewa, pembayaran, pengaturan tampilan, dan preferensi disimpan di <strong>localStorage</strong> browser Anda. Kami tidak mengirim data ini ke server PropertiKu secara default.</p>
+
+    <h2>Telegram (opsional)</h2>
+    <p>Jika Anda mengisi Bot Token dan Chat ID di Pengaturan, aplikasi Anda mengirim permintaan langsung ke API Telegram. Token dan data chat tidak disimpan di server kami; mereka hanya ada di perangkat Anda dan di infrastruktur Telegram sesuai kebijakan Telegram.</p>
+
+    <h2>Service Worker & cache</h2>
+    <p>Aplikasi dapat menggunakan Service Worker untuk cache aset agar lebih cepat dan dapat dipakai offline sebagian. Cache tidak menyimpan “data bisnis” Anda di luar localStorage kecuali salinan aset app (JS/CSS/HTML).</p>
+
+    <h2>Font & sumber daya pihak ketiga</h2>
+    <p>Font dapat dimuat dari Google Fonts. Saat dimuat, penyedia font dapat melihat alamat IP Anda seperti permintaan web pada umumnya.</p>
+
+    <h2>Analytics & pemantauan error (opsional)</h2>
+    <p>Pengelola situs dapat mengaktifkan Google Analytics dan/atau Sentry dengan mengisi ID di konfigurasi deploy. Jika diaktifkan, data teknis penggunaan (misalnya peristiwa halaman atau error) dapat diproses oleh penyedia tersebut. Saat tidak diaktifkan, tidak ada pengiriman analytics dari kode default PropertiKu.</p>
+
+    <h2>Backup</h2>
+    <p>Fitur Export/Import memungkinkan Anda menyalin data ke file. Anda bertanggung jawab atas keamanan file tersebut.</p>
+
+    <h2>Perubahan</h2>
+    <p>Kami dapat memperbarui kebijakan ini. Tanggal di atas akan diubah saat ada revisi material.</p>
+
+    <h2>Kontak</h2>
+    <p>Untuk pertanyaan privasi, hubungi kontak dukungan yang Anda cantumkan di situs distribusi PropertiKu.</p>
+
+    <hr class="lang-divider">
+
+    <h1>Privacy Policy</h1>
+    <p class="meta">PropertiKu — last updated: April 2026</p>
+
+    <p>PropertiKu is a rental property management app that runs in your browser (including when installed as a PWA). Operational data is kept on your device by default.</p>
+
+    <h2>Data stored on your device</h2>
+    <p>Units, tenants, payments, UI settings, and preferences are stored in <strong>localStorage</strong>. We do not send this data to PropertiKu servers by default.</p>
+
+    <h2>Telegram (optional)</h2>
+    <p>If you connect a bot, your browser calls Telegram’s API directly. Credentials stay on your device and are subject to Telegram’s policies.</p>
+
+    <h2>Service worker & cache</h2>
+    <p>A service worker may cache app assets for speed and partial offline use. Business data remains in localStorage unless you export it.</p>
+
+    <h2>Third-party fonts</h2>
+    <p>Fonts may load from Google Fonts; the provider may process IP addresses as with normal web requests.</p>
+
+    <h2>Analytics & crash reporting (optional)</h2>
+    <p>Deployers may enable Google Analytics and/or Sentry via configuration. When disabled, the default app does not send analytics.</p>
+
+    <h2>Backup</h2>
+    <p>Export/import JSON is under your control; protect exported files.</p>
+
+    <h2>Changes</h2>
+    <p>We may update this policy; the date above will change for material revisions.</p>
+
+    <h2>Contact</h2>
+    <p>Use the support contact published with your distribution of PropertiKu.</p>
+
+    <p style="margin-top:32px"><a class="legal-back" href="./index.html">← Back to app</a></p>
+  </div>
+</body>
+</html>

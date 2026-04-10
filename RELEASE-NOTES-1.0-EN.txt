@@ -1,0 +1,85 @@
+PropertiKu — Version 1.0 Release Notes (English)
+================================================
+
+--- SHORT (Play Store / "What's new") ---
+
+PropertiKu 1.0 — first release.
+
+Manage rental properties in one app: units & tenants, leases, bills & expenses, due reminders, cash flow, and reports (yield, projection, occupancy, mortgage calculator, charts). Simple or Pro mode. Indonesian & English. Backup your data (export/import). Light & dark theme. PWA — add to home screen. Data is stored on your device (local). Ideal for boarding houses, shophouses, and other rental portfolios.
+
+
+--- ONE-LINER "What's new" ---
+
+First release of PropertiKu — manage rentals, bills, reports & mortgage tools in one app; your data stays on your device.
+
+
+--- SHORT DESCRIPTION (optional ~80 chars) ---
+
+Rental property manager: units, tenants, bills & reports — data on your device.
+
+
+--- FULL FEATURE LIST ---
+
+CORE
+- Rental property management as a web app / PWA; main data stored locally on the device (browser storage).
+- Two UI modes: Simple (financial summary) and Pro (full analytics & reports).
+- Languages: Indonesian & English (ID / EN toggle).
+- Theme: light & dark.
+- PWA: install / add to home screen, themed icons (teal/green).
+- First-run onboarding.
+
+MAIN NAVIGATION (bottom bar)
+- Home — dashboard overview.
+- Tenants — list & search tenants.
+- Pay — all payment & expense records.
+- Units — units by property, filters for occupied / vacant.
+- Reports / Summary — label follows mode (full Reports vs Summary).
+
+DASHBOARD (HOME)
+- Greeting & quick stats: unit count, occupancy, overdue count.
+- Business calendar — reminders for: lease end dates, property tax (PBB) if configured, permit expiry, open maintenance tickets.
+- This month's cash flow — income, expenses, net profit.
+- Upcoming dues — rent bills that are pending or overdue (sorted by due date).
+- My properties — snapshot per property with occupancy.
+- ROI per property (Pro) — quick indicators per property.
+
+TENANTS
+- Add / edit tenants, link to units & leases (start–end dates).
+- Tenant archive & unit-level history.
+- Search.
+
+PAYMENTS (PAY)
+- Filters: All / Unpaid / Paid / Overdue.
+- Views: By date (timeline) or By tenant (accordion).
+- Record rent income & expenses; mark paid, due dates, billing periods.
+
+UNITS
+- Filters: all / occupied / vacant.
+- Add units (name, property, type: boarding, apartment, house, shophouse, office, etc.), rent, status, subtype / facilities.
+- Bulk add multiple units per property (Pro).
+- Unit photos, tenant history, per-unit settings.
+
+REPORTS (PRO MODE)
+- Overview — monthly/yearly P&L, yield vs purchase price, transactions, history.
+- Yield — property comparison, gross/net yield, payback, annual costs, loan installments if set.
+- Projection — assumptions for price & rent growth, horizon, per-property table.
+- Risk simulation — vacancy, rent drop, expense increase, installment stress.
+- Occupancy — bars per property, 6-month trend, leases ending soon.
+- By property — cards: occupancy, income/net, yield, payback, potential rent.
+- Mortgage (KPR) — payment simulator, closing costs, insurance, amortization, rent vs mortgage comparison, save installment to property.
+- Charts — financial / occupancy visuals.
+- Operations (Insight) — combined reminders, repair tickets, churn, rent change history.
+
+FLOATING ACTION BUTTON (FAB)
+- Add unit, add tenant, record payment, record expense, maintenance ticket (Pro).
+
+SETTINGS
+- UI mode: Simple / Pro.
+- Light / dark theme.
+- Export / import data (JSON backup).
+- Telegram (optional) — reminders if configured.
+- Property data — purchase price, PBB, annual costs, mortgage fields, permits, etc.
+
+PRIVACY
+- No mandatory cloud; data primarily stays on device.
+- Export/import to move devices or keep backups.

@@ -103,6 +103,14 @@ try {
       $ext = [IO.Path]::GetExtension($filePath).ToLowerInvariant()
       $contentType = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { 'application/octet-stream' }
       $res.ContentType = $contentType
+      # Tanpa ini, browser/SW sering menyimpan CSS/JS lama — preview tablet terasa "ngadat".
+      if ($ext -in '.html', '.css', '.js', '.json', '.webmanifest') {
+        try {
+          [void]$res.Headers.Add('Cache-Control', 'no-store, no-cache, must-revalidate')
+        } catch {
+          # Beberapa host .NET membatasi header ini — abaikan, server tetap jalan.
+        }
+      }
       $bytes = [IO.File]::ReadAllBytes($filePath)
       $res.OutputStream.Write($bytes, 0, $bytes.Length)
     } else {

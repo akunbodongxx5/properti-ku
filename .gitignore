@@ -1,2 +1,4 @@
 .claude/
+.cursor/
+debug-*.log
 propertiKu-backup*.json
