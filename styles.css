@@ -278,6 +278,14 @@ body {
   flex-shrink: 0;
 }
 
+.card-title-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.card-title-row .card-title { margin-bottom: 0; flex: 1; min-width: 0; }
+.rpt-export-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-shrink: 0; }
+.rpt-export-btn { font-size: 12px; padding: 8px 14px; white-space: nowrap; }
+
 /* ===== Cashflow ===== */
 .cashflow-summary { display: flex; flex-direction: column; gap: 12px; }
 .cashflow-item { display: flex; justify-content: space-between; align-items: center; }
@@ -564,6 +572,14 @@ body {
 .unit-item-right { flex-shrink: 0; text-align: right; }
 .unit-item-price { font-size: 14px; font-weight: 800; color: var(--primary); }
 .unit-item-period { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+.unit-item-lease {
+  width: 100%; flex-basis: 100%; margin-top: 6px; font-size: 11px; font-weight: 600;
+  color: var(--text-secondary); line-height: 1.35;
+}
+.unit-lease-muted { color: var(--text-muted); font-style: italic; }
+.unit-lease-in { color: var(--text-secondary); }
+.unit-lease-out { color: var(--text-secondary); }
+.unit-lease-sep { color: var(--text-muted); font-weight: 500; }
 .unit-item-facs { width: 100%; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .unit-item-facs .facility-tag { font-size: 10px; padding: 2px 8px; }
 .floor-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }

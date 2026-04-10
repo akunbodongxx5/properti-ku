@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=38">
 </head>
 <body>
   <script>
@@ -149,7 +149,13 @@
             <button class="filter-tab" onclick="changeReportPeriod('year', this)" data-i18n="rpt.yearly">Tahunan</button>
           </div>
           <div class="card">
-            <h3 class="card-title" data-i18n="rpt.finSummary">Ringkasan Keuangan</h3>
+            <div class="card-title-row">
+              <h3 class="card-title" data-i18n="rpt.finSummary">Ringkasan Keuangan</h3>
+              <div class="rpt-export-group">
+                <button type="button" class="btn btn-outline rpt-export-btn" onclick="exportOverviewReportCsv()" data-i18n="rpt.exportCsvTax">CSV</button>
+                <button type="button" class="btn btn-outline rpt-export-btn" onclick="exportOverviewReportPdf()" data-i18n="rpt.exportPdf">PDF</button>
+              </div>
+            </div>
             <div class="report-grid">
               <div class="report-item"><span class="report-label" data-i18n="rpt.income">Pemasukan</span><span class="report-value income" id="rpt-income">Rp 0</span></div>
               <div class="report-item"><span class="report-label" data-i18n="rpt.expense">Pengeluaran</span><span class="report-value expense" id="rpt-expense">Rp 0</span></div>
@@ -278,12 +284,12 @@
   <script>
     window.PROPERTIKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production' };
   </script>
-  <script src="analytics.js?v=34"></script>
-  <script src="i18n.js?v=34"></script>
-  <script src="app.js?v=34"></script>
+  <script src="analytics.js?v=38"></script>
+  <script src="i18n.js?v=38"></script>
+  <script src="app.js?v=38"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=34').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=38').then((reg) => {
         reg.update();
         console.log('SW registered:', reg.scope);
       }).catch((err) => {

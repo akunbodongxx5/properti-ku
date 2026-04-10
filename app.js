@@ -140,6 +140,15 @@ function formatSisaTenorMonths(sisaTenor) {
 }
 function formatRpFull(n) { return 'Rp ' + Number(n).toLocaleString(numLocaleTag()); }
 
+/** Rp. + pemisah ribuan untuk laporan cetak/PDF (bukan saran pajak — hanya tampilan). */
+function formatIdrPrint(n) {
+  const x = Number(n);
+  if (isNaN(x)) return 'Rp. 0';
+  const absStr = Math.abs(Math.round(x)).toLocaleString(numLocaleTag());
+  if (x < 0) return '- Rp. ' + absStr;
+  return 'Rp. ' + absStr;
+}
+
 // Number input formatting with thousand separator (dot)
 function formatNumDots(n) {
   if (!n && n !== 0) return '';
@@ -176,6 +185,65 @@ function dateLocaleTag() {
 function formatDate(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString(dateLocaleTag(), { day: 'numeric', month: 'short', year: 'numeric' });
+}
+/** Tanggal ringkas untuk baris unit (mis. 10 Des 25). */
+function formatDateShort(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString(dateLocaleTag(), { day: 'numeric', month: 'short', year: '2-digit' });
+}
+/** Kontrak berakhir sebelum hari ini (kalender). */
+function isLeaseEndBeforeToday(endStr) {
+  const end = parseYMD(endStr);
+  if (!end) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  return end < today;
+}
+
+/**
+ * Samakan status unit dengan kontrak penyewa: occupied tanpa penyewa / kontrak lewat → vacant.
+ * Dipanggil saat load dan sebelum render daftar unit.
+ */
+function syncUnitOccupancyFromTenants() {
+  const tenants = getTenants();
+  const units = getUnits();
+  let changed = false;
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.status !== 'occupied') continue;
+    const tn = tenants.find(t => t.unitId === u.id);
+    if (!tn) {
+      units[i] = { ...u, status: 'vacant' };
+      changed = true;
+      continue;
+    }
+    if (isLeaseEndBeforeToday(tn.endDate)) {
+      units[i] = { ...u, status: 'vacant' };
+      changed = true;
+    }
+  }
+  if (changed) saveUnits(units);
+}
+
+function getTenantForUnit(unitId) {
+  return getTenants().find(t => t.unitId === unitId) || null;
+}
+
+function getUnitLeaseDatesLineHtml(u) {
+  if (u.status !== 'occupied') return '';
+  const tn = getTenantForUnit(u.id);
+  if (!tn) {
+    return `<div class="unit-item-lease"><span class="unit-lease-muted">${escapeHtml(t('unit.noRenters'))}</span></div>`;
+  }
+  const inn = formatDateShort(tn.startDate);
+  const out = formatDateShort(tn.endDate);
+  return `<div class="unit-item-lease"><span class="unit-lease-in">${escapeHtml(t('unit.leaseIn'))}: ${escapeHtml(inn)}</span><span class="unit-lease-sep"> · </span><span class="unit-lease-out">${escapeHtml(t('unit.leaseOut'))}: ${escapeHtml(out)}</span></div>`;
+}
+
+function csvEscapeCell(val) {
+  const s = val == null ? '' : String(val);
+  return `"${s.replace(/"/g, '""')}"`;
 }
 function getMonthYear(d) { const x = d ? new Date(d) : new Date(); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`; }
 function getYear(d) { return d ? new Date(d).getFullYear().toString() : new Date().getFullYear().toString(); }
@@ -1143,6 +1211,7 @@ function getFloorColor(unitName) {
 }
 
 function renderUnits() {
+  syncUnitOccupancyFromTenants();
   const units = getUnits();
   const searchTerm = (document.getElementById('search-unit')?.value || '').toLowerCase().trim();
   let filtered = unitFilter === 'all' ? units : units.filter(u => u.status === unitFilter);
@@ -1199,6 +1268,7 @@ function renderUnits() {
           const floorDot = floorColor ? `<span class="floor-dot" style="background:${floorColor}" title="${t('unit.floorTitle')}"></span>` : '';
           const hasPhotos = getUnitPhotos().some(p => p.unitId === u.id);
           const hasHistory = getTenantHistory().some(h => h.unitId === u.id);
+          const leaseLine = getUnitLeaseDatesLineHtml(u);
           return `<div class="unit-item unit-${u.status}" onclick="showUnitForm(${onclickStrArg(u.id)})">
             <div class="unit-item-left">
               ${floorDot}
@@ -1211,6 +1281,7 @@ function renderUnits() {
               <span class="unit-item-price">${formatRp(u.price)}<span class="unit-item-period">/${u.billingCycle==='yearly'?t('period.yr'):t('period.mo')}</span></span>
               ${getUnitMonthlyCost(u) > 0 ? `<div style="font-size:10px;color:var(--danger);font-weight:600;margin-top:2px">-${formatRp(getUnitMonthlyCost(u))}${t('unit.perCostMo')}</div>` : ''}
             </div>
+            ${leaseLine}
             ${facs ? `<div class="unit-item-facs">${facs}${extraFacs > 0 ? `<span class="facility-tag fac-more">+${extraFacs}</span>` : ''}</div>` : ''}
           </div>`;
         }).join('');
@@ -1406,6 +1477,7 @@ function saveTenant(e, editId) {
     showToast(t('msg.tenantUpdated'), 'success');
   }
 
+  syncUnitOccupancyFromTenants();
   closeModal(); refreshCurrentPage();
 }
 
@@ -1974,6 +2046,261 @@ function renderOverview() {
       <span class="tx-date">${formatDate(p.dueDate)} · ${p.status==='paid'?t('tx.statusPaid'):t('tx.statusPending')}</span></div>
       <span class="tx-amount ${isE?'expense':'income'}">${isE?'-':'+'}${formatRp(p.amount)}</span></div>`;
   }).join('');
+}
+
+/** Data ringkasan overview untuk CSV/PDF (satu sumber kebenaran). */
+function buildOverviewExportContext() {
+  const payments = getPayments();
+  const units = getUnits();
+  const cp = reportPeriod === 'month' ? getMonthYear() : getYear();
+  const pp = payments.filter(p => (reportPeriod === 'month' ? p.period === cp : p.period.startsWith(cp)));
+  const ti = pp.filter(p => p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+  const te = pp.filter(p => p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+  const net = ti - te;
+  const allProps = getProperties();
+  const tpp = allProps.reduce((s, p) => s + (p.purchasePrice || 0), 0);
+  const totalFixedCosts = allProps.reduce((s, p) => s + getPropertyAnnualCost(p), 0);
+  const an = reportPeriod === 'month' ? net * 12 : net;
+  const y = tpp > 0 ? (((an - (reportPeriod === 'month' ? totalFixedCosts / 12 : totalFixedCosts)) / tpp) * 100).toFixed(1) : '-';
+
+  const props = [...new Set(units.map(u => u.property))];
+  const pnlRows = props.map(pr => {
+    const i = pp.filter(p => p.propertyName === pr && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    const e = pp.filter(p => p.propertyName === pr && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    return { property: pr, income: i, expense: e, net: i - e };
+  });
+
+  const expByCat = {};
+  pp.filter(p => p.type === 'expense').forEach(p => {
+    const c = p.expenseCategory || 'other';
+    expByCat[c] = (expByCat[c] || 0) + p.amount;
+  });
+
+  const incByProp = {};
+  pp.filter(p => p.type === 'income' && p.status === 'paid').forEach(p => {
+    const pr = p.propertyName || '-';
+    incByProp[pr] = (incByProp[pr] || 0) + p.amount;
+  });
+
+  const sortedChrono = [...pp].sort((a, b) => {
+    const da = new Date(a.dueDate || 0).getTime();
+    const db = new Date(b.dueDate || 0).getTime();
+    return da - db;
+  });
+
+  return {
+    cp,
+    reportPeriod,
+    pp,
+    ti,
+    te,
+    net,
+    y,
+    tpp,
+    pnlRows,
+    expByCat,
+    incByProp,
+    sortedChrono,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function expenseCategoryPlain(id) {
+  const key = 'expense.' + (id || 'other');
+  const s = typeof t === 'function' ? t(key) : key;
+  return s === key ? String(id || 'other') : s;
+}
+
+/**
+ * CSV untuk pajak / akuntansi: kolom Amount_IDR angka bulat (mudah SUM di Excel), grup per bagian.
+ */
+function exportOverviewReportCsv() {
+  const ctx = buildOverviewExportContext();
+  const rows = [];
+  const slug = ctx.reportPeriod === 'month' ? ctx.cp : `year-${ctx.cp}`;
+
+  rows.push([t('rpt.taxReportTitle'), '', '']);
+  rows.push([t('rpt.taxGenerated'), ctx.generatedAt, '']);
+  rows.push([t('rpt.exportPeriod'), ctx.reportPeriod === 'month' ? ctx.cp : t('rpt.exportYearValue', { y: ctx.cp }), '']);
+  rows.push([t('rpt.exportMode'), ctx.reportPeriod === 'month' ? t('rpt.monthly') : t('rpt.yearly'), '']);
+  rows.push(['', '', '']);
+
+  rows.push([t('rpt.taxSectionTotals'), 'Amount_IDR', 'Notes']);
+  rows.push([t('rpt.taxLineIncomePaid'), String(Math.round(ctx.ti)), t('rpt.taxNotePaidOnly')]);
+  rows.push([t('rpt.taxLineExpense'), String(Math.round(ctx.te)), '']);
+  rows.push([t('rpt.taxLineNet'), String(Math.round(ctx.net)), '']);
+  if (isProMode() && ctx.y !== '-') {
+    rows.push([t('rpt.yieldBuy'), ctx.y + '%', t('rpt.taxNoteYield')]);
+  }
+  rows.push(['', '', '']);
+
+  rows.push([t('rpt.taxIncomeByProp'), 'Amount_IDR', '']);
+  const incKeys = Object.keys(ctx.incByProp).sort();
+  if (!incKeys.length) rows.push([t('chart.noData'), '', '']);
+  else incKeys.forEach(k => rows.push([k, String(Math.round(ctx.incByProp[k])), '']));
+  rows.push(['', '', '']);
+
+  rows.push([t('rpt.taxExpenseByCat'), 'Amount_IDR', '']);
+  const catKeys = Object.keys(ctx.expByCat).sort();
+  if (!catKeys.length) rows.push(['—', '0', '']);
+  else catKeys.forEach(k => rows.push([expenseCategoryPlain(k), String(Math.round(ctx.expByCat[k])), '']));
+  rows.push(['', '', '']);
+
+  rows.push([t('rpt.taxPnlByProp'), 'Income_IDR', 'Expense_IDR', 'Net_IDR']);
+  if (!ctx.pnlRows.length) rows.push([t('chart.noData'), '', '', '']);
+  else {
+    ctx.pnlRows.forEach(r => {
+      rows.push([r.property, String(Math.round(r.income)), String(Math.round(r.expense)), String(Math.round(r.net))]);
+    });
+  }
+  rows.push(['', '', '', '']);
+
+  rows.push([t('rpt.taxSectionLines'), '', '', '']);
+  rows.push([
+    t('rpt.exportColPeriod'),
+    t('rpt.exportColDate'),
+    t('rpt.colType'),
+    t('rpt.colCategory'),
+    t('rpt.exportColProp'),
+    t('rpt.exportColDesc'),
+    t('rpt.colAmountIdr'),
+    t('rpt.exportColStatus')
+  ]);
+  ctx.sortedChrono.forEach(p => {
+    const isE = p.type === 'expense';
+    const typ = isE ? t('form.typeExpense') : t('form.typeIncome');
+    const cat = isE ? expenseCategoryPlain(p.expenseCategory) : t('rpt.taxCatRent');
+    const desc = p.description || (isE ? '—' : t('rpt.taxRentShort'));
+    const amt = isE ? -Math.round(p.amount) : Math.round(p.amount);
+    rows.push([
+      p.period || '',
+      p.dueDate ? String(p.dueDate).slice(0, 10) : '',
+      typ,
+      cat,
+      p.propertyName || '-',
+      desc,
+      String(amt),
+      p.status || ''
+    ]);
+  });
+  rows.push(['', '', '', '', '', '', '', '']);
+  rows.push([t('rpt.taxDisclaimer'), '', '', '', '', '', '', '']);
+
+  const bom = '\uFEFF';
+  const csv = rows.map(r => r.map(csvEscapeCell).join(',')).join('\r\n');
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `propertiKu-tax-${slug}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  if (typeof showToast === 'function') showToast(t('rpt.exportDone'), 'success', 2500);
+}
+
+function buildTaxReportPrintHtml(ctx) {
+  const esc = escapeHtml;
+  const periodLbl = ctx.reportPeriod === 'month' ? esc(ctx.cp) : esc(t('rpt.exportYearValue', { y: ctx.cp }));
+
+  const incRows = Object.keys(ctx.incByProp).sort().map(k =>
+    `<tr><td>${esc(k)}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(ctx.incByProp[k]))}</td></tr>`
+  ).join('') || `<tr><td colspan="2">${esc(t('chart.noData'))}</td></tr>`;
+
+  const catRows = Object.keys(ctx.expByCat).sort().map(k =>
+    `<tr><td>${esc(expenseCategoryPlain(k))}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(ctx.expByCat[k]))}</td></tr>`
+  ).join('') || `<tr><td colspan="2">—</td></tr>`;
+
+  const pnlRows = ctx.pnlRows.length
+    ? ctx.pnlRows.map(r => `<tr><td>${esc(r.property)}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(r.income))}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(r.expense))}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(r.net))}</td></tr>`).join('')
+    : `<tr><td colspan="4">${esc(t('chart.noData'))}</td></tr>`;
+
+  const lineRows = ctx.sortedChrono.map(p => {
+    const isE = p.type === 'expense';
+    const amt = isE ? -Math.round(p.amount) : Math.round(p.amount);
+    return `<tr>
+      <td>${esc(p.period || '')}</td>
+      <td>${esc((p.dueDate || '').toString().slice(0, 10))}</td>
+      <td>${esc(isE ? t('form.typeExpense') : t('form.typeIncome'))}</td>
+      <td>${esc(isE ? expenseCategoryPlain(p.expenseCategory) : t('rpt.taxCatRent'))}</td>
+      <td>${esc(p.propertyName || '-')}</td>
+      <td>${esc(p.description || '')}</td>
+      <td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(amt))}</td>
+      <td>${esc(p.status || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const yieldRow = isProMode() && ctx.y !== '-'
+    ? `<tr><td>${esc(t('rpt.yieldBuy'))}</td><td style="text-align:right">${esc(ctx.y)}%</td></tr>`
+    : '';
+
+  const docSlug = esc(ctx.cp);
+  return `<!DOCTYPE html><html lang="${typeof getLocale === 'function' && getLocale() === 'en' ? 'en' : 'id'}"><head><meta charset="utf-8"><title>${esc(t('rpt.taxReportTitle'))} — ${docSlug}</title>
+<style>
+  body { font-family: system-ui, Segoe UI, sans-serif; font-size: 11pt; color: #111; margin: 24px; }
+  h1 { font-size: 16pt; margin: 0 0 4px; }
+  .meta { color: #444; font-size: 10pt; margin-bottom: 20px; }
+  h2 { font-size: 12pt; margin: 18px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; page-break-inside: avoid; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 700; font-size: 10pt; }
+  .disc { font-size: 9pt; color: #555; margin-top: 24px; max-width: 720px; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${esc(t('rpt.taxReportTitle'))}</h1>
+  <div class="meta">${esc(t('rpt.taxGenerated'))}: ${esc(ctx.generatedAt)}<br>
+  ${esc(t('rpt.exportPeriod'))}: ${periodLbl} · ${esc(t('rpt.exportMode'))}: ${esc(ctx.reportPeriod === 'month' ? t('rpt.monthly') : t('rpt.yearly'))}</div>
+
+  <h2>${esc(t('rpt.taxSectionTotals'))}</h2>
+  <table><thead><tr><th>${esc(t('rpt.taxColLabel'))}</th><th>${esc(t('rpt.pdfColAmount'))}</th></tr></thead><tbody>
+    <tr><td>${esc(t('rpt.taxLineIncomePaid'))}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(ctx.ti))}</td></tr>
+    <tr><td>${esc(t('rpt.taxLineExpense'))}</td><td style="text-align:right;white-space:nowrap">${esc(formatIdrPrint(ctx.te))}</td></tr>
+    <tr><td><strong>${esc(t('rpt.taxLineNet'))}</strong></td><td style="text-align:right;white-space:nowrap"><strong>${esc(formatIdrPrint(ctx.net))}</strong></td></tr>
+    ${yieldRow}
+  </tbody></table>
+
+  <h2>${esc(t('rpt.taxIncomeByProp'))}</h2>
+  <table><thead><tr><th>${esc(t('rpt.exportColProp'))}</th><th>${esc(t('rpt.pdfColAmount'))}</th></tr></thead><tbody>${incRows}</tbody></table>
+
+  <h2>${esc(t('rpt.taxExpenseByCat'))}</h2>
+  <table><thead><tr><th>${esc(t('rpt.colCategory'))}</th><th>${esc(t('rpt.pdfColAmount'))}</th></tr></thead><tbody>${catRows}</tbody></table>
+
+  <h2>${esc(t('rpt.taxPnlByProp'))}</h2>
+  <table><thead><tr><th>${esc(t('rpt.exportColProp'))}</th><th>${esc(t('rpt.taxColIncome'))}</th><th>${esc(t('rpt.taxColExpense'))}</th><th>${esc(t('rpt.taxColNet'))}</th></tr></thead><tbody>${pnlRows}</tbody></table>
+
+  <h2>${esc(t('rpt.taxSectionLines'))}</h2>
+  <table><thead><tr>
+    <th>${esc(t('rpt.exportColPeriod'))}</th><th>${esc(t('rpt.exportColDate'))}</th><th>${esc(t('rpt.colType'))}</th><th>${esc(t('rpt.colCategory'))}</th>
+    <th>${esc(t('rpt.exportColProp'))}</th><th>${esc(t('rpt.exportColDesc'))}</th><th>${esc(t('rpt.colAmountIdr'))}</th><th>${esc(t('rpt.exportColStatus'))}</th>
+  </tr></thead><tbody>${ctx.sortedChrono.length ? lineRows : `<tr><td colspan="8">${esc(t('tx.none'))}</td></tr>`}</tbody></table>
+
+  <p class="disc">${esc(t('rpt.taxDisclaimer'))}</p>
+</body></html>`;
+}
+
+/** PDF ringan: buka jendela siap cetak → simpan sebagai PDF dari dialog browser. */
+function exportOverviewReportPdf() {
+  const ctx = buildOverviewExportContext();
+  const html = buildTaxReportPrintHtml(ctx);
+  const w = window.open('', '_blank');
+  if (!w) {
+    if (typeof showToast === 'function') showToast(t('rpt.pdfPopupBlocked'), 'error', 4000);
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => {
+    try {
+      w.focus();
+      w.print();
+    } catch (e) { /* ignore */ }
+  }, 300);
+  if (typeof showToast === 'function') showToast(t('rpt.pdfPrintHint'), 'info', 4500);
+}
+
+/** Alias kompatibilitas lama */
+function exportOverviewReport() {
+  exportOverviewReportCsv();
 }
 
 // ===== YIELD CALCULATOR =====
@@ -4476,6 +4803,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   updateOverduePayments();
+  syncUnitOccupancyFromTenants();
   renderDashboard();
   if (!document.getElementById('dash-biz-cal')) {
     console.warn('[PropertiKu] #dash-biz-cal missing — index.html or cache may be stale. Hard refresh, or open via serve script and close other app tabs.');
