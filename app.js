@@ -246,6 +246,14 @@ function csvEscapeCell(val) {
   return `"${s.replace(/"/g, '""')}"`;
 }
 function getMonthYear(d) { const x = d ? new Date(d) : new Date(); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`; }
+/** Ringkasan bulanan: periode YYYY-MM, atau sewa lunas di muka (`prepaid`) diatribut ke bulan kalender dari tanggal jatuh tempo. */
+function paymentMatchesCalendarMonth(p, cm) {
+  if (p.period === cm) return true;
+  if (p.period === 'prepaid' && p.type === 'income' && p.status === 'paid' && p.dueDate) {
+    return getMonthYear(p.dueDate) === cm;
+  }
+  return false;
+}
 function getYear(d) { return d ? new Date(d).getFullYear().toString() : new Date().getFullYear().toString(); }
 function daysUntil(d) { const now = new Date(); now.setHours(0,0,0,0); const t = new Date(d); t.setHours(0,0,0,0); return Math.ceil((t-now)/(864e5)); }
 function parseYMD(s) {
@@ -1336,6 +1344,9 @@ function showTenantForm(editId) {
         <input class="form-input" name="startDate" type="date" required value="${tn?.startDate||''}" onchange="onTenantStartDateChange(this.value)"></div>
       <div class="form-group"><label class="form-label">${t('form.leaseEnd')}</label>
         <input class="form-input" name="endDate" type="date" required value="${tn?.endDate||''}"></div>
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" name="paidInAdvance" id="tenant-paid-in-advance" value="1" ${tn?.paidInAdvance ? 'checked' : ''} style="margin-top:4px;width:auto">
+        <label for="tenant-paid-in-advance" style="font-weight:500;cursor:pointer">${t('form.paidInAdvance')}<br><small style="color:var(--text-muted);font-weight:400">${t('form.paidInAdvanceHelp')}</small></label></div>
       <div class="form-group"><label class="form-label">${t('form.dueDay')}</label>
         <input class="form-input" name="dueDay" type="number" id="tenant-due-day" min="1" max="31" placeholder="${t('form.dueDayPh')}" value="${defaultDueDay}">
         <small style="color:var(--text-muted);display:block;margin-top:4px">${t('form.dueDayHelp')}</small></div>
@@ -1362,10 +1373,81 @@ function onTenantStartDateChange(val) {
   }
 }
 
+/** Jumlah periode tagihan (bulan atau tahun) dalam rentang kontrak — sama logika dengan generate cicilan. */
+function countBillingPeriodsForLease(tenant, unit) {
+  const isYearly = unit.billingCycle === 'yearly';
+  const start = new Date(tenant.startDate);
+  const end = new Date(tenant.endDate);
+  let n = 0;
+  if (isYearly) {
+    let current = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (current <= endMonth) {
+      n++;
+      current.setFullYear(current.getFullYear() + 1);
+    }
+  } else {
+    let current = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (current <= endMonth) {
+      n++;
+      current.setMonth(current.getMonth() + 1);
+    }
+  }
+  return n;
+}
+
+/** Tanggal jatuh tempo periode pertama (sama seperti iterasi pertama generate cicilan). */
+function firstDueDateInLease(tenant, unit) {
+  const dueDay = tenant.dueDay || calcDefaultDueDay(tenant.startDate);
+  const start = new Date(tenant.startDate);
+  const yr = start.getFullYear();
+  const mn = start.getMonth();
+  const maxDay = new Date(yr, mn + 1, 0).getDate();
+  const actualDueDay = Math.min(dueDay, maxDay);
+  return `${yr}-${String(mn + 1).padStart(2, '0')}-${String(actualDueDay).padStart(2, '0')}`;
+}
+
+/** Lewatkan reminder Telegram untuk tagihan tidak relevan (lunas di muka, jatuh tempo setelah akhir kontrak). */
+function shouldIncludePaymentInReminders(p, tenants) {
+  if (p.prepaidFullLease) return false;
+  if (p.type !== 'income' || !p.tenantId || !p.dueDate) return true;
+  const tenant = tenants.find(x => x.id === p.tenantId);
+  if (!tenant || !tenant.endDate) return true;
+  const pd = parseYMD(p.dueDate);
+  const te = parseYMD(tenant.endDate);
+  if (pd && te && pd > te) return false;
+  return true;
+}
+
+/** Pending/overdue yang “perlu perhatian” di dashboard & badge (selaras reminder Telegram). */
+function isActionableDueForDashboard(p, tenants) {
+  if (p.status !== 'pending' && p.status !== 'overdue') return false;
+  return shouldIncludePaymentInReminders(p, tenants);
+}
+
 function generatePaymentsForTenant(tenant) {
   const units = getUnits();
   const unit = units.find(u => u.id === tenant.unitId);
   if (!unit || !tenant.startDate || !tenant.endDate) return [];
+
+  if (tenant.paidInAdvance) {
+    const periods = countBillingPeriodsForLease(tenant, unit);
+    if (periods < 1) return [];
+    const totalAmount = periods * unit.price;
+    const dueDate = firstDueDateInLease(tenant, unit);
+    const isYearly = unit.billingCycle === 'yearly';
+    return [{
+      id: DB.genId(), type: 'income', tenantId: tenant.id,
+      propertyName: unit.property, amount: totalAmount, period: 'prepaid',
+      dueDate,
+      status: 'paid',
+      description: t('pay.descPrepaidFull', { unit: unit.name, name: tenant.name }),
+      autoGenerated: true, billingCycle: isYearly ? 'yearly' : 'monthly',
+      prepaidFullLease: true,
+      createdAt: new Date().toISOString()
+    }];
+  }
 
   const amount = unit.price;
   const isYearly = unit.billingCycle === 'yearly';
@@ -1449,6 +1531,7 @@ function saveTenant(e, editId) {
   const data = { id: editId || DB.genId(), name: f.name.value.trim(), phone: f.phone.value.trim(),
     unitId: f.unitId.value, startDate: f.startDate.value, endDate: f.endDate.value,
     dueDay: dueDayVal || calcDefaultDueDay(f.startDate.value),
+    paidInAdvance: !!f.paidInAdvance?.checked,
     deposit: parseNum(f.deposit.value)||0, notes: f.notes.value.trim(),
     vacancyDaysBeforeMoveIn: editId ? (getTenants().find(x=>x.id===editId)?.vacancyDaysBeforeMoveIn ?? null) : vacancyDaysBeforeMoveIn,
     createdAt: editId ? (getTenants().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
@@ -1486,17 +1569,27 @@ function regeneratePayments(tenantId) {
   if (!tenant) return;
 
   const payments = getPayments();
-  // Find existing auto-generated payments for this tenant
+
+  if (tenant.paidInAdvance) {
+    if (!confirm(t('confirm.regenPrepaid'))) return;
+    const kept = payments.filter(p => !(p.tenantId === tenantId && p.autoGenerated));
+    const newPayments = generatePaymentsForTenant(tenant);
+    kept.push(...newPayments);
+    savePayments(kept);
+    updateOverduePayments();
+    alert(t('msg.billsRegenPrepaid', { n: newPayments.length }));
+    closeModal(); refreshCurrentPage();
+    return;
+  }
+
+  // Cicilan: pertahankan periode yang sudah lunas
   const existingAuto = payments.filter(p => p.tenantId === tenantId && p.autoGenerated);
   const paidPeriods = existingAuto.filter(p => p.status === 'paid').map(p => p.period);
 
-  // Remove old unpaid auto-generated payments
   const kept = payments.filter(p => !(p.tenantId === tenantId && p.autoGenerated && p.status !== 'paid'));
 
-  // Generate new ones
   const newPayments = generatePaymentsForTenant(tenant);
 
-  // Skip periods that are already paid
   const toAdd = newPayments.filter(p => !paidPeriods.includes(p.period));
 
   kept.push(...toAdd);
@@ -1725,8 +1818,9 @@ function paymentRowHtml(p, tenants) {
 }
 
 function paymentGroupBadgeRow(items) {
-  const nOverdue = items.filter(p => p.status === 'overdue').length;
-  const nPending = items.filter(p => p.status === 'pending').length;
+  const tenants = getTenants();
+  const nOverdue = items.filter(p => p.status === 'overdue' && isActionableDueForDashboard(p, tenants)).length;
+  const nPending = items.filter(p => p.status === 'pending' && isActionableDueForDashboard(p, tenants)).length;
   const nPaid = items.filter(p => p.status === 'paid').length;
   let html = '';
   if (nOverdue) html += `<span class="pg-mini pg-mini-overdue">${t('pay.miniOver', { n: nOverdue })}</span>`;
@@ -1739,7 +1833,8 @@ function paymentGroupDefaultOpen(items) {
   // Semua: default tertutup per grup (nama) supaya daftar tidak “rame”; user buka manual.
   if (paymentFilter === 'all') return false;
   if (paymentFilter === 'paid' || paymentFilter === 'pending' || paymentFilter === 'overdue') return true;
-  return items.some(p => p.status === 'pending' || p.status === 'overdue');
+  const tenants = getTenants();
+  return items.some(p => isActionableDueForDashboard(p, tenants));
 }
 
 function quickTogglePaid(id, ev) {
@@ -1843,10 +1938,10 @@ function renderDashboard() {
   const units = getUnits(), payments = getPayments(), tenants = getTenants(), cm = getMonthYear();
   const total = units.length, occ = units.filter(u=>u.status==='occupied').length;
   const occupancy = total>0 ? Math.round((occ/total)*100) : 0;
-  const mp = payments.filter(p=>p.period===cm);
+  const mp = payments.filter(p => paymentMatchesCalendarMonth(p, cm));
   const inc = mp.filter(p=>p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0);
   const exp = mp.filter(p=>p.type==='expense').reduce((s,p)=>s+p.amount,0);
-  const overdue = payments.filter(p=>p.status==='overdue').length;
+  const overdue = payments.filter(p => p.status === 'overdue' && isActionableDueForDashboard(p, tenants)).length;
 
   const simple = isSimpleMode();
   const greet = document.getElementById('greeting-container');
@@ -1874,8 +1969,8 @@ function renderDashboard() {
   if (cfEx) cfEx.textContent = formatRpFull(exp);
   if (cfNt) cfNt.textContent = formatRpFull(inc - exp);
 
-  // Upcoming dues (sort by due date; missing dueDate last)
-  const pending = payments.filter(p => p.status === 'pending' || p.status === 'overdue')
+  // Upcoming dues — filter sama seperti reminder (selaras Telegram)
+  const pending = payments.filter(p => isActionableDueForDashboard(p, tenants))
     .sort((a, b) => {
       const aMs = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
       const bMs = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
@@ -2709,8 +2804,8 @@ function renderMultiProperty() {
     const occCount = pu.filter(u=>u.status==='occupied').length;
     const vacCount = pu.length - occCount;
     const occRate = pu.length>0 ? Math.round(occCount/pu.length*100) : 0;
-    const monthInc = payments.filter(p=>p.propertyName===prop&&p.period===cm&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0);
-    const monthExp = payments.filter(p=>p.propertyName===prop&&p.period===cm&&p.type==='expense').reduce((s,p)=>s+p.amount,0);
+    const monthInc = payments.filter(p => p.propertyName === prop && paymentMatchesCalendarMonth(p, cm) && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    const monthExp = payments.filter(p => p.propertyName === prop && paymentMatchesCalendarMonth(p, cm) && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
     const net = monthInc - monthExp;
     const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
     const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
@@ -2724,7 +2819,8 @@ function renderMultiProperty() {
     const paybackYears = purchasePrice > 0 && netProfit > 0 ? (purchasePrice / netProfit).toFixed(1) : '-';
     const paybackLabel = formatPaybackLabel(paybackYears);
     const propTenants = tenants.filter(t => pu.some(u=>u.id===t.unitId));
-    const overdueCount = payments.filter(p=>p.propertyName===prop&&p.status==='overdue').length;
+    const overdueCount = payments.filter(p =>
+      p.propertyName === prop && p.status === 'overdue' && isActionableDueForDashboard(p, tenants)).length;
     const type = pu[0]?.type || 'kos';
     const icons = { kos:'🏠', apartemen:'🏢', rumah:'🏡', ruko:'🏪', kantor:'🏛' };
     const typeTk = 'form.type.' + type;
@@ -3700,8 +3796,9 @@ async function sendTelegramReminder() {
   const cfg = getTelegramConfig();
   if (!cfg.token || !cfg.chatId) { alert(t('msg.tgSetupFirst')); return; }
 
-  const payments = getPayments(), tenants = getTenants(), units = getUnits();
-  const pending = payments.filter(p => (p.status === 'pending' || p.status === 'overdue') && p.type === 'income');
+  const payments = getPayments(), tenants = getTenants();
+  const pending = payments.filter(p =>
+    (p.status === 'pending' || p.status === 'overdue') && p.type === 'income' && shouldIncludePaymentInReminders(p, tenants));
 
   if (!pending.length) { alert(t('msg.noPendingBills')); return; }
 
@@ -3918,17 +4015,19 @@ async function autoReminderCheck() {
   if (lastSent === today) return; // Already sent today
 
   const payments = getPayments();
+  const tenants = getTenants();
   const upcoming = payments.filter(p => {
-    if (p.status === 'paid') return false;
+    if (!isActionableDueForDashboard(p, tenants)) return false;
     const dl = daysUntil(p.dueDate);
     return dl >= 0 && dl <= 5; // Due within 5 days
   });
-  const overdue = payments.filter(p => p.status === 'overdue' || (p.status === 'pending' && daysUntil(p.dueDate) < 0));
+  const overdue = payments.filter(p => {
+    if (!isActionableDueForDashboard(p, tenants)) return false;
+    return p.status === 'overdue' || (p.status === 'pending' && daysUntil(p.dueDate) < 0);
+  });
 
   const needReminder = [...upcoming, ...overdue];
   if (needReminder.length === 0) return;
-
-  const tenants = getTenants();
   let msg = '🏠 *PropertiKu — Reminder Otomatis*\n';
   msg += `📅 ${new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
 

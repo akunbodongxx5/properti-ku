@@ -337,6 +337,8 @@
       'form.pickUnit': 'Pilih unit...',
       'form.leaseStart': 'Mulai Sewa',
       'form.leaseEnd': 'Akhir Kontrak',
+      'form.paidInAdvance': 'Sewa lunas di muka untuk seluruh kontrak',
+      'form.paidInAdvanceHelp': 'Satu tagihan total (lunas), tanpa reminder H-n sewa. Cocok sewa dibayar penuh di depan.',
       'form.dueDay': 'Tgl Jatuh Tempo (tiap bulan)',
       'form.dueDayPh': 'Auto: 1 hari sebelum mulai sewa',
       'form.dueDayHelp': 'Tanggal jatuh tempo pembayaran sewa tiap bulan. Kosongkan = otomatis 1 hari sebelum tanggal mulai sewa.',
@@ -448,6 +450,7 @@
 
       'pay.descYearly': 'Sewa Tahunan {unit} — {name} ({yr})',
       'pay.descMonthly': 'Sewa {unit} — {name}',
+      'pay.descPrepaidFull': 'Sewa lunas di muka (seluruh kontrak) — {unit} — {name}',
 
       'msg.propRequired': 'Nama properti wajib diisi',
       'msg.propDuplicate': 'Nama properti sudah dipakai',
@@ -461,6 +464,8 @@
       'msg.tenantAddedBills': 'Penyewa ditambahkan! {n} tagihan dibuat',
       'msg.tenantUpdated': 'Penyewa berhasil diperbarui',
       'msg.billsRegen': '🔄 Tagihan di-regenerate!\n✅ {new} tagihan baru\n💰 {kept} yang sudah lunas tetap dipertahankan',
+      'msg.billsRegenPrepaid': '🔄 Tagihan lunas di muka di-regenerate.\n✅ {n} tagihan (total kontrak, status lunas). Tagihan otomatis lama untuk penyewa ini diganti.',
+      'confirm.regenPrepaid': 'Regenerate untuk mode lunas di muka akan menghapus SEMUA tagihan otomatis penyewa ini (termasuk yang sudah lunas) dan menggantinya satu tagihan total lunas. Lanjutkan?',
       'confirm.deleteTenant': 'Hapus penyewa ini?\n\nTagihan yang belum dibayar juga akan dihapus.\nTagihan yang sudah lunas tetap disimpan.',
       'msg.paymentUpdated': 'Pembayaran diperbarui',
       'msg.expenseRecorded': 'Pengeluaran dicatat',
@@ -1142,6 +1147,8 @@
       'form.pickUnit': 'Choose unit…',
       'form.leaseStart': 'Lease start',
       'form.leaseEnd': 'Lease end',
+      'form.paidInAdvance': 'Rent paid in full upfront for the whole lease',
+      'form.paidInAdvanceHelp': 'One total bill (marked paid), no H-n rent reminders. Use when the tenant paid everything upfront.',
       'form.dueDay': 'Due day (each month)',
       'form.dueDayPh': 'Auto: 1 day before lease start',
       'form.dueDayHelp': 'Rent due day each month. Leave empty = 1 day before lease start date.',
@@ -1253,6 +1260,7 @@
 
       'pay.descYearly': 'Yearly rent {unit} — {name} ({yr})',
       'pay.descMonthly': 'Rent {unit} — {name}',
+      'pay.descPrepaidFull': 'Rent paid in full upfront (whole lease) — {unit} — {name}',
 
       'msg.propRequired': 'Property name is required',
       'msg.propDuplicate': 'Property name already exists',
@@ -1266,6 +1274,8 @@
       'msg.tenantAddedBills': 'Tenant added! {n} bills created',
       'msg.tenantUpdated': 'Tenant updated',
       'msg.billsRegen': '🔄 Bills regenerated!\n✅ {new} new bills\n💰 {kept} paid periods kept',
+      'msg.billsRegenPrepaid': '🔄 Upfront rent bills regenerated.\n✅ {n} bill(s) (full contract total, marked paid). Previous auto bills for this tenant were replaced.',
+      'confirm.regenPrepaid': 'Regenerating in upfront-paid mode removes ALL auto-generated bills for this tenant (including paid ones) and replaces them with one full-contract paid bill. Continue?',
       'confirm.deleteTenant': 'Delete this tenant?\n\nUnpaid bills will be removed.\nPaid bills are kept.',
       'msg.paymentUpdated': 'Payment updated',
       'msg.expenseRecorded': 'Expense recorded',
