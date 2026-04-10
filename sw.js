@@ -1,13 +1,12 @@
 // Bump this + query ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
-const CACHE_NAME = 'propertiKu-v38';
+const CACHE_NAME = 'propertiKu-v40';
 const ASSETS = [
-  './',
-  './index.html',
+  // Jangan precache index.html — mengurangi shell HTML usang di cache; navigasi tetap network-first.
   './privacy.html',
-  './analytics.js?v=38',
-  './i18n.js?v=38',
-  './app.js?v=38',
-  './styles.css?v=38',
+  './analytics.js?v=40',
+  './i18n.js?v=40',
+  './app.js?v=40',
+  './styles.css?v=40',
   './manifest.json',
   './icon.svg',
   './icon-192.png',
