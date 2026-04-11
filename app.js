@@ -52,17 +52,14 @@ function getOwnerDisplayName() {
   return (DB.getVal('owner_display_name') || '').trim();
 }
 
-/** HTML aman untuk baris besar di bawah "Selamat …" (Pro + nama: hanya nama; tanpa nama: teks Investor). */
+/** Baris nama di beranda: mengganti kata «Investor»; sapaan jam hanya di baris atas (getGreeting). */
 function getDashboardGreetingSublineHtml() {
   const name = getOwnerDisplayName().slice(0, 40);
   const nameEsc = escapeHtml(name);
-  let out;
-  if (isSimpleMode()) {
-    out = name ? t('dash.welcomeNamed', { name: nameEsc }) : escapeHtml(t('dash.welcome'));
-  } else {
-    out = !name ? escapeHtml(t('dash.investor')) : nameEsc;
-  }
-  return out;
+  // #region agent log
+  __pkDbg15cbf0({ location: 'app.js:getDashboardGreetingSublineHtml', message: 'greeting subline', data: { nameLen: name.length, usedFallback: !name, tInvestorBare: typeof t === 'function' ? String(t('dash.investorBare')).slice(0, 24) : 'no-t' }, hypothesisId: 'C', runId: 'pre' });
+  // #endregion
+  return name ? nameEsc : escapeHtml(t('dash.investorBare'));
 }
 
 function saveOwnerProfileFromSettings() {
@@ -101,6 +98,26 @@ function setUiModeFromSettings(mode) {
 }
 
 // ===== Helpers =====
+// #region agent log
+function __pkDbg15cbf0(payload) {
+  const line = JSON.stringify(Object.assign({ sessionId: '15cbf0', timestamp: Date.now() }, payload));
+  try {
+    const k = 'propertiKu_dbg15cbf0';
+    const prev = sessionStorage.getItem(k) || '';
+    if (prev.length < 80000) sessionStorage.setItem(k, prev + (prev ? '\n' : '') + line);
+  } catch (_) { /* quota / private mode */ }
+  fetch('http://127.0.0.1:7524/ingest/431c77b0-0b7e-4a04-871a-2b6f95d25dd1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '15cbf0' },
+    body: line
+  }).catch(() => {});
+}
+if (typeof window !== 'undefined') {
+  window.__exportPkDbg15cbf0 = () => {
+    try { return sessionStorage.getItem('propertiKu_dbg15cbf0') || ''; } catch (_) { return ''; }
+  };
+}
+// #endregion
 function numLocaleTag() {
   return (typeof getLocale === 'function' && getLocale() === 'en') ? 'en-GB' : 'id-ID';
 }
@@ -296,16 +313,41 @@ function occupiedUnitsByLeasesAtMonth(units, tenants, history, ym) {
 }
 function getGreeting() {
   const h = new Date().getHours();
+  let text;
   if (typeof t !== 'function') {
-    if (h < 11) return 'Selamat Pagi';
-    if (h < 15) return 'Selamat Siang';
-    if (h < 18) return 'Selamat Sore';
-    return 'Selamat Malam';
+    if (h < 11) text = 'Selamat Pagi';
+    else if (h < 15) text = 'Selamat Siang';
+    else if (h < 18) text = 'Selamat Sore';
+    else text = 'Selamat Malam';
+  } else {
+    const en = typeof getLocale === 'function' && getLocale() === 'en';
+    // EN: "Good morning" through 11:59 — was incorrectly using noon → "Good afternoon" for hour 11.
+    if (en) {
+      if (h < 12) text = t('greeting.morning');
+      else if (h < 17) text = t('greeting.afternoon');
+      else text = t('greeting.evening');
+    } else {
+      if (h < 11) text = t('greeting.morning');
+      else if (h < 15) text = t('greeting.noon');
+      else if (h < 18) text = t('greeting.afternoon');
+      else text = t('greeting.evening');
+    }
   }
-  if (h < 11) return t('greeting.morning');
-  if (h < 15) return t('greeting.noon');
-  if (h < 18) return t('greeting.afternoon');
-  return t('greeting.evening');
+  // #region agent log
+  __pkDbg15cbf0({
+    location: 'app.js:getGreeting',
+    message: 'time greeting resolved',
+    data: {
+      hour: h,
+      locale: typeof getLocale === 'function' ? getLocale() : null,
+      enBranch: typeof getLocale === 'function' && getLocale() === 'en',
+      textSample: String(text).slice(0, 48)
+    },
+    hypothesisId: 'D',
+    runId: 'post-fix'
+  });
+  // #endregion
+  return text;
 }
 function naturalSort(a, b) {
   const ax = [], bx = [];
@@ -1952,8 +1994,13 @@ function renderDashboard() {
 
   const simple = isSimpleMode();
   const greet = document.getElementById('greeting-container');
+  // #region agent log
+  __pkDbg15cbf0({ location: 'app.js:renderDashboard', message: 'dashboard render entry', data: { hasGreet: !!greet, hasBizCal: !!document.getElementById('dash-biz-cal'), simple, page: currentPage, uiMode: getUiMode(), swControlled: typeof navigator !== 'undefined' && navigator.serviceWorker && !!navigator.serviceWorker.controller }, hypothesisId: 'A', runId: 'pre' });
+  // #endregion
   if (!greet) return;
-  greet.innerHTML = `
+  let __pkDashHtml = '';
+  try {
+    __pkDashHtml = `
     <div class="greeting-banner">
       <div class="greeting-text">${getGreeting()} 👋</div>
       <div class="greeting-name">${getDashboardGreetingSublineHtml()}</div>
@@ -1965,6 +2012,13 @@ function renderDashboard() {
       </div>
       <button type="button" class="greeting-cal-jump" onclick="var el=document.getElementById('dash-biz-cal');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})">${t('dash.jumpCal')}</button>
     </div>`;
+  } catch (e) {
+    // #region agent log
+    __pkDbg15cbf0({ location: 'app.js:renderDashboard', message: 'greeting template threw', data: { err: String(e && e.message || e) }, hypothesisId: 'B', runId: 'pre' });
+    // #endregion
+    throw e;
+  }
+  greet.innerHTML = __pkDashHtml;
 
   const cfTitle = document.getElementById('dash-cf-title');
   if (cfTitle) cfTitle.textContent = simple ? t('dash.cfSimple') : t('dash.cfPro');
