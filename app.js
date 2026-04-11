@@ -47,35 +47,28 @@ function getUiMode() {
 function isProMode() { return getUiMode() === 'pro'; }
 function isSimpleMode() { return getUiMode() === 'simple'; }
 
-/** Nama & sebutan di kartu sapaan Beranda (localStorage). */
+/** Nama di kartu sapaan Beranda (localStorage). */
 function getOwnerDisplayName() {
   return (DB.getVal('owner_display_name') || '').trim();
 }
-function getOwnerTitle() {
-  return (DB.getVal('owner_title') || '').trim();
-}
 
-/** HTML aman untuk baris besar di bawah "Selamat …" (ganti "Investor!" / selamat datang). */
+/** HTML aman untuk baris besar di bawah "Selamat …" (Pro + nama: hanya nama; tanpa nama: teks Investor). */
 function getDashboardGreetingSublineHtml() {
   const name = getOwnerDisplayName().slice(0, 40);
-  const title = getOwnerTitle().slice(0, 32);
   const nameEsc = escapeHtml(name);
-  const titleEsc = escapeHtml(title);
+  let out;
   if (isSimpleMode()) {
-    if (name) return t('dash.welcomeNamed', { name: nameEsc });
-    return escapeHtml(t('dash.welcome'));
+    out = name ? t('dash.welcomeNamed', { name: nameEsc }) : escapeHtml(t('dash.welcome'));
+  } else {
+    out = !name ? escapeHtml(t('dash.investor')) : nameEsc;
   }
-  if (!name && !title) return escapeHtml(t('dash.investor'));
-  if (name && title) return `${titleEsc}, ${nameEsc}`;
-  if (name) return `${escapeHtml(t('dash.investorBare'))}, ${nameEsc}`;
-  return titleEsc;
+  return out;
 }
 
 function saveOwnerProfileFromSettings() {
   const n = document.getElementById('settings-owner-name');
-  const tit = document.getElementById('settings-owner-title');
   if (n) DB.setVal('owner_display_name', (n.value || '').trim().slice(0, 40));
-  if (tit) DB.setVal('owner_title', (tit.value || '').trim().slice(0, 32));
+  DB.setVal('owner_title', '');
   renderDashboard();
   if (typeof showToast === 'function') showToast(t('toast.ownerSaved'), 'success', 2400);
   showSettings();
@@ -479,8 +472,6 @@ function showOnboarding() {
       <div class="onboarding-owner-fields">
         <label class="form-label" for="onboard-owner-name">${t('owner.nameAsk')}</label>
         <input type="text" id="onboard-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}">
-        <label class="form-label" for="onboard-owner-title" style="margin-top:12px">${t('owner.titleAsk')}</label>
-        <input type="text" id="onboard-owner-title" class="form-input" maxlength="32" autocomplete="off" placeholder="${t('owner.titlePh')}">
         <small class="onboarding-owner-hint">${t('owner.fieldsHint')}</small>
       </div>
       <button class="onboarding-btn" onclick="dismissOnboarding()">${t('onboard.start')}</button>
@@ -491,9 +482,8 @@ function showOnboarding() {
 }
 function dismissOnboarding() {
   const n = document.getElementById('onboard-owner-name');
-  const tit = document.getElementById('onboard-owner-title');
   if (n) DB.setVal('owner_display_name', (n.value || '').trim().slice(0, 40));
-  if (tit) DB.setVal('owner_title', (tit.value || '').trim().slice(0, 32));
+  DB.setVal('owner_title', '');
   DB.setVal('onboarded', '1');
   const el = document.getElementById('onboarding-overlay');
   if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s ease'; setTimeout(() => el.remove(), 300); }
@@ -3888,8 +3878,6 @@ function showSettings() {
     <div class="form-group" style="margin-bottom:20px">
       <label class="form-label">${t('settings.ownerGreet')}</label>
       <input type="text" id="settings-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}" value="${escapeHtml(getOwnerDisplayName())}">
-      <label class="form-label" style="margin-top:12px">${t('settings.ownerTitle')}</label>
-      <input type="text" id="settings-owner-title" class="form-input" maxlength="32" autocomplete="off" placeholder="${t('owner.titlePh')}" value="${escapeHtml(getOwnerTitle())}">
       <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.ownerHelp')}</small>
       <button type="button" class="btn btn-primary" style="width:100%;margin-top:12px" onclick="saveOwnerProfileFromSettings()">${t('settings.saveGreet')}</button>
     </div>
