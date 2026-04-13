@@ -6,6 +6,18 @@ Aplikasi web (PWA) untuk mengelola properti sewaan: unit, penyewa, pembayaran, d
 
 Layout memakai lebar kolom adaptif (hingga ~960px di layar lebar), target sentuh ~48px, dan dashboard memasang **cashflow** dan **tagihan mendatang** berdampingan mulai lebar ≥768px. Modal form di layar ≥900px tampil sebagai kartu di tengah (bukan hanya sheet dari bawah).
 
+## Graphify (Cursor / AI — konteks codebase)
+
+Proyek ini bisa memakai [Graphify](https://github.com/safishamsi/graphify) agar asisten kode membaca `graphify-out/GRAPH_REPORT.md` dulu, bukan seluruh file mentah.
+
+```bash
+pip install graphifyy
+python -m graphify cursor install
+python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+```
+
+Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Rebuild graph setelah perubahan besar kode. Lihat juga `AGENTS.md`.
+
 ## Menjalankan lokal
 
 Butuh server HTTP statis (bukan `file://`) agar Service Worker dan fitur yang memanggil API eksternal berfungsi.
