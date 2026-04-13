@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 6 files · ~35,091 words
+- 7 files · ~35,198 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 236 nodes · 723 edges · 19 communities detected
+- 237 nodes · 723 edges · 20 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -29,6 +29,7 @@
 - [[_COMMUNITY_Community 16|Community 16]]
 - [[_COMMUNITY_Community 17|Community 17]]
 - [[_COMMUNITY_Community 18|Community 18]]
+- [[_COMMUNITY_Community 19|Community 19]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `getUnits()` - 45 edges
@@ -132,6 +133,10 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 19 - "Community 19"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **Thin community `Community 15`** (2 nodes): `gtag()`, `analytics.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -140,6 +145,8 @@ Nodes (0):
 - **Thin community `Community 17`** (1 nodes): `sw.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 18`** (1 nodes): `serve-simple.ps1`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 19`** (1 nodes): `rebuild-graph.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions

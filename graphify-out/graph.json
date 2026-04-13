@@ -1890,6 +1890,14 @@
       "source_location": "L18",
       "id": "analytics_gtag",
       "community": 15
+    },
+    {
+      "label": "rebuild-graph.ps1",
+      "file_type": "code",
+      "source_file": "scripts\\rebuild-graph.ps1",
+      "source_location": "L1",
+      "id": "scripts_rebuild_graph_ps1",
+      "community": 19
     }
   ],
   "links": [
