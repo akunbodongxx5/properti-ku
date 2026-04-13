@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=44">
 </head>
 <body>
   <script>
@@ -94,6 +94,7 @@
           <div id="upcoming-dues" class="list-container">
             <p class="empty-state" data-i18n="dash.upcomingEmpty">Belum ada data pembayaran</p>
           </div>
+          <div id="reminder-tools" class="reminder-tools" hidden></div>
         </div>
         <div class="card">
           <h3 class="card-title" data-i18n="dash.properties">Properti Saya</h3>
@@ -303,12 +304,12 @@
   <script>
     window.PROPERTIKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production' };
   </script>
-  <script src="analytics.js?v=40"></script>
-  <script src="i18n.js?v=40"></script>
-  <script src="app.js?v=40"></script>
+  <script src="analytics.js?v=44"></script>
+  <script src="i18n.js?v=44"></script>
+  <script src="app.js?v=44"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=40').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=44').then((reg) => {
         reg.update();
         console.log('SW registered:', reg.scope);
       }).catch((err) => {

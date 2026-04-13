@@ -56,9 +56,6 @@ function getOwnerDisplayName() {
 function getDashboardGreetingSublineHtml() {
   const name = getOwnerDisplayName().slice(0, 40);
   const nameEsc = escapeHtml(name);
-  // #region agent log
-  __pkDbg15cbf0({ location: 'app.js:getDashboardGreetingSublineHtml', message: 'greeting subline', data: { nameLen: name.length, usedFallback: !name, tInvestorBare: typeof t === 'function' ? String(t('dash.investorBare')).slice(0, 24) : 'no-t' }, hypothesisId: 'C', runId: 'pre' });
-  // #endregion
   return name ? nameEsc : escapeHtml(t('dash.investorBare'));
 }
 
@@ -98,26 +95,6 @@ function setUiModeFromSettings(mode) {
 }
 
 // ===== Helpers =====
-// #region agent log
-function __pkDbg15cbf0(payload) {
-  const line = JSON.stringify(Object.assign({ sessionId: '15cbf0', timestamp: Date.now() }, payload));
-  try {
-    const k = 'propertiKu_dbg15cbf0';
-    const prev = sessionStorage.getItem(k) || '';
-    if (prev.length < 80000) sessionStorage.setItem(k, prev + (prev ? '\n' : '') + line);
-  } catch (_) { /* quota / private mode */ }
-  fetch('http://127.0.0.1:7524/ingest/431c77b0-0b7e-4a04-871a-2b6f95d25dd1', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '15cbf0' },
-    body: line
-  }).catch(() => {});
-}
-if (typeof window !== 'undefined') {
-  window.__exportPkDbg15cbf0 = () => {
-    try { return sessionStorage.getItem('propertiKu_dbg15cbf0') || ''; } catch (_) { return ''; }
-  };
-}
-// #endregion
 function numLocaleTag() {
   return (typeof getLocale === 'function' && getLocale() === 'en') ? 'en-GB' : 'id-ID';
 }
@@ -333,20 +310,6 @@ function getGreeting() {
       else text = t('greeting.evening');
     }
   }
-  // #region agent log
-  __pkDbg15cbf0({
-    location: 'app.js:getGreeting',
-    message: 'time greeting resolved',
-    data: {
-      hour: h,
-      locale: typeof getLocale === 'function' ? getLocale() : null,
-      enBranch: typeof getLocale === 'function' && getLocale() === 'en',
-      textSample: String(text).slice(0, 48)
-    },
-    hypothesisId: 'D',
-    runId: 'post-fix'
-  });
-  // #endregion
   return text;
 }
 function naturalSort(a, b) {
@@ -1994,13 +1957,8 @@ function renderDashboard() {
 
   const simple = isSimpleMode();
   const greet = document.getElementById('greeting-container');
-  // #region agent log
-  __pkDbg15cbf0({ location: 'app.js:renderDashboard', message: 'dashboard render entry', data: { hasGreet: !!greet, hasBizCal: !!document.getElementById('dash-biz-cal'), simple, page: currentPage, uiMode: getUiMode(), swControlled: typeof navigator !== 'undefined' && navigator.serviceWorker && !!navigator.serviceWorker.controller }, hypothesisId: 'A', runId: 'pre' });
-  // #endregion
   if (!greet) return;
-  let __pkDashHtml = '';
-  try {
-    __pkDashHtml = `
+  greet.innerHTML = `
     <div class="greeting-banner">
       <div class="greeting-text">${getGreeting()} 👋</div>
       <div class="greeting-name">${getDashboardGreetingSublineHtml()}</div>
@@ -2012,13 +1970,6 @@ function renderDashboard() {
       </div>
       <button type="button" class="greeting-cal-jump" onclick="var el=document.getElementById('dash-biz-cal');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})">${t('dash.jumpCal')}</button>
     </div>`;
-  } catch (e) {
-    // #region agent log
-    __pkDbg15cbf0({ location: 'app.js:renderDashboard', message: 'greeting template threw', data: { err: String(e && e.message || e) }, hypothesisId: 'B', runId: 'pre' });
-    // #endregion
-    throw e;
-  }
-  greet.innerHTML = __pkDashHtml;
 
   const cfTitle = document.getElementById('dash-cf-title');
   if (cfTitle) cfTitle.textContent = simple ? t('dash.cfSimple') : t('dash.cfPro');
@@ -2050,6 +2001,23 @@ function renderDashboard() {
           : `<span class="upcoming-tag">${t('dash.inDays', { n: d })}</span>`;
       return `<div class="due-item"><div class="due-info"><span class="due-name">${escapeHtml(tnt?.name || t('dash.expenseLbl'))}</span><span class="due-detail">${escapeHtml(p.propertyName || '-')} · ${lbl}</span></div><span class="due-amount">${formatRp(p.amount)}</span></div>`;
     }).join('');
+  }
+
+  const rt = document.getElementById('reminder-tools');
+  const scopeRem = getReminderScopePayments();
+  if (rt) {
+    if (!scopeRem.length) {
+      rt.setAttribute('hidden', '');
+      rt.innerHTML = '';
+    } else {
+      rt.removeAttribute('hidden');
+      rt.innerHTML = `<p class="reminder-tools-hint">${escapeHtml(t('reminder.toolsHint'))}</p>
+        <div class="reminder-tools-row">
+          <button type="button" class="btn btn-outline btn-reminder-ics" onclick="downloadReminderCalendarIcs()">${escapeHtml(t('reminder.downloadIcs'))}</button>
+          <button type="button" class="btn btn-outline" onclick="openGoogleCalendarNextDue()">${escapeHtml(t('reminder.googleNext'))}</button>
+          <button type="button" class="btn btn-outline btn-reminder-wa" onclick="openWhatsAppReminderPage()">${escapeHtml(t('reminder.whatsappBtn'))}</button>
+        </div>`;
+    }
   }
 
   // ROI Cards (Pro saja)
@@ -3974,6 +3942,12 @@ function showSettings() {
     </div>
 
     <form onsubmit="saveSettingsForm(event)">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">${t('settings.channelsTitle')}</label>
+        <p style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin:0 0 10px 0">${t('settings.channelsIntro')}</p>
+        <input type="tel" class="form-input" name="waPhone" id="settings-wa-phone" autocomplete="tel" inputmode="tel" placeholder="${t('settings.waPhonePh')}" value="${escapeHtml(DB.getVal('reminder_whatsapp'))}">
+        <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.waPhoneHint')}</small>
+      </div>
       <div class="form-group"><label class="form-label">${t('settings.tgToken')}</label>
         <input class="form-input" name="tgToken" id="tg-token-input" placeholder="123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ" value="${cfg.token}"></div>
 
@@ -4074,8 +4048,200 @@ async function testTelegramConnection() {
 function saveSettingsForm(e) {
   e.preventDefault();
   const f = e.target;
+  const waField = f.elements && f.elements.namedItem ? f.elements.namedItem('waPhone') : null;
   saveTelegramConfig(f.tgToken.value.trim(), f.tgChatId.value.trim());
+  const waRaw = (waField && 'value' in waField)
+    ? String(waField.value || '').trim()
+    : (f.waPhone ? String(f.waPhone.value || '').trim() : '');
+  DB.setVal('reminder_whatsapp', waRaw);
   alert(t('msg.settingsSaved'));
+}
+
+// ===== CALENDAR (.ics / Google) + WHATSAPP REMINDER (scope = autoReminderCheck) =====
+function getReminderScopePayments() {
+  const payments = getPayments();
+  const tenants = getTenants();
+  const upcoming = payments.filter(p => {
+    if (!isActionableDueForDashboard(p, tenants)) return false;
+    const dl = daysUntil(p.dueDate);
+    return dl >= 0 && dl <= 5;
+  });
+  const overdue = payments.filter(p => {
+    if (!isActionableDueForDashboard(p, tenants)) return false;
+    return p.status === 'overdue' || (p.status === 'pending' && daysUntil(p.dueDate) < 0);
+  });
+  const map = new Map();
+  [...overdue, ...upcoming].forEach(p => map.set(p.id, p));
+  return [...map.values()].sort((a, b) => {
+    const aMs = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+    const bMs = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+    return aMs - bMs;
+  });
+}
+
+function normalizeWhatsAppDigits(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('62')) return d;
+  if (d.startsWith('0')) return '62' + d.slice(1);
+  return d;
+}
+
+function getReminderWhatsappPhone() {
+  return normalizeWhatsAppDigits(DB.getVal('reminder_whatsapp'));
+}
+
+function escapeIcsText(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
+function formatIcsDateCompact(ymd) {
+  if (!ymd) return '';
+  const s = String(ymd).slice(0, 10).replace(/-/g, '');
+  return s.length === 8 ? s : '';
+}
+
+function addOneDayYmdCompact(ymd8) {
+  const y = +ymd8.slice(0, 4);
+  const m = +ymd8.slice(4, 6) - 1;
+  const d = +ymd8.slice(6, 8);
+  const dt = new Date(y, m, d);
+  dt.setDate(dt.getDate() + 1);
+  return dt.getFullYear() + String(dt.getMonth() + 1).padStart(2, '0') + String(dt.getDate()).padStart(2, '0');
+}
+
+function buildReminderIcsCalendar(prefList) {
+  const tenants = getTenants();
+  const list = Array.isArray(prefList) ? prefList : getReminderScopePayments();
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  let out = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//PropertiKu//Reminder//ID\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  for (const p of list) {
+    const ymd = formatIcsDateCompact(p.dueDate);
+    if (!ymd) continue;
+    const tnt = tenants.find(x => x.id === p.tenantId);
+    const dl = daysUntil(p.dueDate);
+    const statusTxt = dl < 0
+      ? t('dash.overdue', { n: Math.abs(dl) })
+      : (dl === 0 ? t('reminder.icsToday') : t('dash.inDays', { n: dl }));
+    const summary = `${t('reminder.icsEventPrefix')}: ${tnt?.name || '—'} — ${p.propertyName || ''}`;
+    const desc = [
+      `${t('reminder.icsDescAmount')}: ${formatRpFull(p.amount)}`,
+      p.description || '',
+      `${t('reminder.icsDescDue')}: ${formatDate(p.dueDate)}`,
+      statusTxt
+    ].filter(Boolean).join('\\n');
+    const uid = `${p.id}-${ymd}@propertiku.local`;
+    const endEx = addOneDayYmdCompact(ymd);
+    out += 'BEGIN:VEVENT\r\n';
+    out += `UID:${uid}\r\n`;
+    out += `DTSTAMP:${stamp}\r\n`;
+    out += `DTSTART;VALUE=DATE:${ymd}\r\n`;
+    out += `DTEND;VALUE=DATE:${endEx}\r\n`;
+    out += `SUMMARY:${escapeIcsText(summary)}\r\n`;
+    out += `DESCRIPTION:${escapeIcsText(desc)}\r\n`;
+    out += 'END:VEVENT\r\n';
+  }
+  out += 'END:VCALENDAR\r\n';
+  return out;
+}
+
+function downloadReminderCalendarIcs() {
+  const list = getReminderScopePayments();
+  if (!list.length) {
+    if (typeof showToast === 'function') showToast(t('reminder.nothingToExport'), 'info', 3200);
+    else alert(t('reminder.nothingToExport'));
+    return;
+  }
+  try {
+    const ics = buildReminderIcsCalendar(list);
+    const vevents = (ics.match(/BEGIN:VEVENT/g) || []).length;
+    if (!vevents) {
+      if (typeof showToast === 'function') showToast(t('reminder.icsNoValidDates'), 'warning', 4500);
+      else alert(t('reminder.icsNoValidDates'));
+      return;
+    }
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'propertiku-reminder.ics';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    if (typeof showToast === 'function') showToast(t('reminder.icsDownloaded'), 'success', 4000);
+  } catch (err) {
+    throw err;
+  }
+}
+
+function googleCalendarUrlForNextDue() {
+  const list = getReminderScopePayments();
+  const tenants = getTenants();
+  for (const p of list) {
+    const ymd = formatIcsDateCompact(p.dueDate);
+    if (!ymd) continue;
+    const tnt = tenants.find(x => x.id === p.tenantId);
+    const endEx = addOneDayYmdCompact(ymd);
+    const text = encodeURIComponent(`${t('reminder.icsEventPrefix')}: ${tnt?.name || ''} — ${p.propertyName || ''}`);
+    const dl = daysUntil(p.dueDate);
+    const statusTxt = dl < 0
+      ? t('dash.overdue', { n: Math.abs(dl) })
+      : (dl === 0 ? t('reminder.icsToday') : t('dash.inDays', { n: dl }));
+    const details = encodeURIComponent(
+      [formatRpFull(p.amount), p.description || '', `${formatDate(p.dueDate)} — ${statusTxt}`].filter(Boolean).join('\n')
+    );
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${ymd}/${endEx}&details=${details}`;
+  }
+  return '';
+}
+
+function openGoogleCalendarNextDue() {
+  const url = googleCalendarUrlForNextDue();
+  if (!url) {
+    if (typeof showToast === 'function') showToast(t('reminder.nothingToExport'), 'info', 3200);
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function buildWhatsAppReminderBody() {
+  const tenants = getTenants();
+  const list = getReminderScopePayments();
+  if (!list.length) return '';
+  let msg = `${t('reminder.waHeader')}\n${new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  list.forEach(p => {
+    const tn = tenants.find(x => x.id === p.tenantId);
+    const d = daysUntil(p.dueDate);
+    const status = d < 0
+      ? `⚠ ${t('dash.overdue', { n: Math.abs(d) })}`
+      : (d === 0 ? `📌 ${t('reminder.waToday')}` : `⏳ ${t('dash.inDays', { n: d })}`);
+    msg += `• ${tn?.name || '-'}\n`;
+    msg += `  ${p.propertyName || '-'} · ${formatRpFull(p.amount)}\n`;
+    msg += `  ${formatDate(p.dueDate)} — ${status}\n\n`;
+  });
+  msg += t('reminder.waFooter', { n: list.length });
+  return msg;
+}
+
+function openWhatsAppReminderPage() {
+  const phone = getReminderWhatsappPhone();
+  if (!phone) {
+    if (typeof showToast === 'function') showToast(t('reminder.waNeedPhone'), 'warning', 4500);
+    else alert(t('reminder.waNeedPhone'));
+    return;
+  }
+  let body = buildWhatsAppReminderBody();
+  if (!body) {
+    if (typeof showToast === 'function') showToast(t('reminder.nothingToExport'), 'info', 3200);
+    return;
+  }
+  if (body.length > 1800) body = body.slice(0, 1790) + '\n…';
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(body)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 // ===== AUTO REMINDER ON LOAD =====

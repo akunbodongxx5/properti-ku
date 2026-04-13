@@ -497,6 +497,14 @@ body {
 /* ===== Due Items ===== */
 .due-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .due-item:last-child { border-bottom: none; }
+
+.reminder-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.reminder-tools[hidden] { display: none !important; }
+.reminder-tools .btn { flex: 1 1 140px; font-size: 13px; justify-content: center; }
+.reminder-tools .btn-reminder-ics { border-color: var(--primary); color: var(--primary); }
+.reminder-tools .btn-reminder-wa { border-color: #25D366; color: #128C7E; }
+.reminder-tools-hint { font-size: 12px; color: var(--text-muted); line-height: 1.45; margin: 0 0 10px 0; }
+.reminder-tools-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .due-info { display: flex; flex-direction: column; gap: 3px; }
 .due-name { font-size: 14px; font-weight: 700; }
 .due-detail { font-size: 12px; color: var(--text-muted); }
