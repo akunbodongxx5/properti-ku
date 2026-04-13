@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 7 files · ~35,236 words
+- 7 files · ~35,232 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -45,7 +45,7 @@
 
 ## Surprising Connections (you probably didn't know these)
 - `buildTaxReportPrintHtml()` --calls--> `isProMode()`  [EXTRACTED]
-  app.js → app.js  _Bridges community 5 → community 13_
+  app.js → app.js  _Bridges community 5 → community 12_
 - `renderReports()` --calls--> `isSimpleMode()`  [EXTRACTED]
   app.js → app.js  _Bridges community 5 → community 4_
 - `getDashboardGreetingSublineHtml()` --calls--> `escapeHtml()`  [EXTRACTED]
@@ -53,7 +53,7 @@
 - `saveOwnerProfileFromSettings()` --calls--> `showToast()`  [EXTRACTED]
   app.js → app.js  _Bridges community 5 → community 3_
 - `formatRp()` --calls--> `numLocaleTag()`  [EXTRACTED]
-  app.js → app.js  _Bridges community 13 → community 4_
+  app.js → app.js  _Bridges community 12 → community 4_
 
 ## Communities
 
@@ -107,11 +107,11 @@ Nodes (5): filterUnits(), isLeaseEndBeforeToday(), renderUnits(), syncUnitOccupa
 
 ### Community 12 - "Community 12"
 Cohesion: 0.5
-Nodes (4): buildWhatsAppReminderBody(), getReminderWhatsappPhone(), normalizeWhatsAppDigits(), openWhatsAppReminderPage()
+Nodes (4): buildTaxReportPrintHtml(), exportOverviewReportPdf(), formatIdrPrint(), numLocaleTag()
 
 ### Community 13 - "Community 13"
 Cohesion: 0.5
-Nodes (4): buildTaxReportPrintHtml(), exportOverviewReportPdf(), formatIdrPrint(), numLocaleTag()
+Nodes (4): buildWhatsAppReminderBody(), getReminderWhatsappPhone(), normalizeWhatsAppDigits(), openWhatsAppReminderPage()
 
 ### Community 14 - "Community 14"
 Cohesion: 0.67
@@ -154,7 +154,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `getUnits()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 10`, `Community 11`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `getTenants()` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 10`, `Community 11`, `Community 12`?**
+- **Why does `getTenants()` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 10`, `Community 11`, `Community 13`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Why does `refreshCurrentPage()` connect `Community 3` to `Community 0`, `Community 1`, `Community 4`, `Community 5`, `Community 6`, `Community 10`, `Community 11`, `Community 14`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._

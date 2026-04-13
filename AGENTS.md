@@ -20,7 +20,7 @@ python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _
 
 Atau di Windows: `powershell -File scripts/rebuild-graph.ps1`
 
-4. **Hook (sekali per clone):** `python -m graphify hook install` — setelah setiap `git commit`, graph dibuild ulang otomatis. Jika `git status` masih menunjukkan `graphify-out/` berubah, **commit lagi** dengan pesan seperti `chore: graphify-out` atau gabungkan ke commit berikutnya.
+4. **Hook Git `graphify hook install` tidak disarankan** di repo ini: rebuild pasca-commit bisa menghasilkan **diff nondeterministik** pada `graphify-out/` (loop commit). **Pola aman:** sebelum `git push`, jalankan rebuild di atas, lalu `git add graphify-out` dan commit bersama (atau satu commit `chore: graphify-out` tepat sebelum push).
 
 ## Dependensi
 
