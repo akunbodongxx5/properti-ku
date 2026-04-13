@@ -12,7 +12,7 @@ Proyek ini memakai **Graphify** (`graphify-out/`). Aturan Cursor ada di `.cursor
 
 1. Sebelum menjawab pertanyaan arsitektur / “di mana file X?”, baca **`graphify-out/GRAPH_REPORT.md`** (atau query `python -m graphify query "..."` dari root repo).
 2. Baca file mentah hanya jika perlu detail baris atau pengguna meminta eksplisit.
-3. **Wajib:** setiap kali ada **perubahan berarti pada kode** (`app.js`, dll.), **rebuild graph** lalu **ikutkan** `graphify-out/` dalam commit/push yang sama (jangan push kode tanpa graph yang segar).
+3. Setiap kali ada **perubahan berarti pada kode** (`app.js`, dll.), **rebuild graph** di mesin lokal agar `graphify-out/` segar. Output itu **tidak di-repo** — tidak perlu commit atau push ke GitHub.
 
 ```bash
 python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
@@ -20,7 +20,7 @@ python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _
 
 Atau di Windows: `powershell -File scripts/rebuild-graph.ps1`
 
-4. **Hook Git `graphify hook install` tidak disarankan** di repo ini: rebuild pasca-commit bisa menghasilkan **diff nondeterministik** pada `graphify-out/` (loop commit). **Pola aman:** sebelum `git push`, jalankan rebuild di atas, lalu `git add graphify-out` dan commit bersama (atau satu commit `chore: graphify-out` tepat sebelum push).
+4. **Hook Git `graphify hook install` tidak disarankan** di repo ini: rebuild pasca-commit bisa menghasilkan **diff nondeterministik** pada `graphify-out/` (loop commit). **Pola aman:** rebuild manual bila butuh konteks segar; jangan mengandalkan hook.
 
 ## Dependensi
 

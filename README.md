@@ -17,7 +17,7 @@ python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _
 # Windows: powershell -File scripts/rebuild-graph.ps1
 ```
 
-**Setiap update kode yang berarti:** rebuild graph di atas, lalu commit **`graphify-out/`** bersama perubahan lain (jangan push kode dengan graph basi). **Sebelum `git push`:** jalankan rebuild lagi jika perlu, lalu pastikan `graphify-out/` ikut ter-commit. (Hook `graphify hook install` bisa memicu diff graph berulang — disarankan rebuild manual + skrip.)
+**Setiap update kode yang berarti:** jalankan rebuild graph di atas **di mesin lokal** agar `graphify-out/` tetap segar untuk Cursor/Graphify. Folder itu **tidak di-commit** (hanya untuk konteks lokal). Hook `graphify hook install` tidak disarankan: rebuild pasca-commit bisa memicu diff graph berulang — pakai rebuild manual + skrip.
 
 Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Lihat juga `AGENTS.md`.
 
