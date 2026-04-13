@@ -14,9 +14,12 @@ Proyek ini bisa memakai [Graphify](https://github.com/safishamsi/graphify) agar 
 pip install graphifyy
 python -m graphify cursor install
 python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+# Windows: powershell -File scripts/rebuild-graph.ps1
 ```
 
-Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Rebuild graph setelah perubahan besar kode. Lihat juga `AGENTS.md`.
+**Setiap update kode yang berarti:** rebuild graph di atas, lalu commit **`graphify-out/`** bersama perubahan lain (jangan push kode dengan graph basi). Opsional sekali per clone: `python -m graphify hook install` — setelah `git commit`, graph dibuild ulang; jika masih ada diff di `graphify-out/`, commit lagi.
+
+Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Lihat juga `AGENTS.md`.
 
 ## Menjalankan lokal
 

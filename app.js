@@ -2006,18 +2006,15 @@ function renderDashboard() {
   const rt = document.getElementById('reminder-tools');
   const scopeRem = getReminderScopePayments();
   if (rt) {
-    if (!scopeRem.length) {
-      rt.setAttribute('hidden', '');
-      rt.innerHTML = '';
-    } else {
-      rt.removeAttribute('hidden');
-      rt.innerHTML = `<p class="reminder-tools-hint">${escapeHtml(t('reminder.toolsHint'))}</p>
+    /* Selalu tampilkan bar (PC & HP sama): dulu disembunyikan jika scope kosong sehingga di perangkat tanpa data terlihat "hilang" vs PC. */
+    rt.removeAttribute('hidden');
+    const hintKey = scopeRem.length ? 'reminder.toolsHint' : 'reminder.toolsHintNoScope';
+    rt.innerHTML = `<p class="reminder-tools-hint">${escapeHtml(t(hintKey))}</p>
         <div class="reminder-tools-row">
           <button type="button" class="btn btn-outline btn-reminder-ics" onclick="downloadReminderCalendarIcs()">${escapeHtml(t('reminder.downloadIcs'))}</button>
           <button type="button" class="btn btn-outline" onclick="openGoogleCalendarNextDue()">${escapeHtml(t('reminder.googleNext'))}</button>
           <button type="button" class="btn btn-outline btn-reminder-wa" onclick="openWhatsAppReminderPage()">${escapeHtml(t('reminder.whatsappBtn'))}</button>
         </div>`;
-    }
   }
 
   // ROI Cards (Pro saja)
