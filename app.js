@@ -4076,6 +4076,27 @@ function getReminderScopePayments() {
   });
 }
 
+/** Tagihan actionable terurut (kartu "Tagihan mendatang") jika jendela reminder kosong. */
+function getDashboardUpcomingPaymentsForReminderFallback(max) {
+  const cap = max == null ? 20 : max;
+  const payments = getPayments();
+  const tenants = getTenants();
+  return payments.filter(p => isActionableDueForDashboard(p, tenants))
+    .sort((a, b) => {
+      const aMs = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const bMs = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+      return aMs - bMs;
+    })
+    .slice(0, cap);
+}
+
+/** Reminder ketat dulu; jika kosong → tagihan mendatang (untuk .ics, Google Calendar, WhatsApp). */
+function getReminderToolsPaymentList() {
+  const scope = getReminderScopePayments();
+  if (scope.length) return { list: scope, mode: 'reminder' };
+  return { list: getDashboardUpcomingPaymentsForReminderFallback(20), mode: 'upcoming' };
+}
+
 function normalizeWhatsAppDigits(raw) {
   let d = String(raw || '').replace(/\D/g, '');
   if (!d) return '';
@@ -4149,7 +4170,7 @@ function buildReminderIcsCalendar(prefList) {
 }
 
 function downloadReminderCalendarIcs() {
-  const list = getReminderScopePayments();
+  const { list } = getReminderToolsPaymentList();
   if (!list.length) {
     if (typeof showToast === 'function') showToast(t('reminder.nothingToExport'), 'info', 3200);
     else alert(t('reminder.nothingToExport'));
@@ -4176,7 +4197,7 @@ function downloadReminderCalendarIcs() {
 }
 
 function googleCalendarUrlForNextDue() {
-  const list = getReminderScopePayments();
+  const { list } = getReminderToolsPaymentList();
   const tenants = getTenants();
   for (const p of list) {
     const ymd = formatIcsDateCompact(p.dueDate);
@@ -4205,27 +4226,10 @@ function openGoogleCalendarNextDue() {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-/** Tagihan actionable berikutnya (sama seperti kartu "Tagihan mendatang"), untuk fallback WA jika jendela reminder kosong. */
-function getDashboardUpcomingPaymentsForWa() {
-  const payments = getPayments();
-  const tenants = getTenants();
-  return payments.filter(p => isActionableDueForDashboard(p, tenants))
-    .sort((a, b) => {
-      const aMs = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-      const bMs = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-      return aMs - bMs;
-    })
-    .slice(0, 8);
-}
-
 function buildWhatsAppReminderBody() {
   const tenants = getTenants();
-  let list = getReminderScopePayments();
-  let mode = 'reminder';
-  if (!list.length) {
-    list = getDashboardUpcomingPaymentsForWa();
-    mode = 'upcoming';
-  }
+  let { list, mode } = getReminderToolsPaymentList();
+  if (mode === 'upcoming') list = list.slice(0, 8);
   if (!list.length) {
     return t('reminder.waBodyNoBills');
   }
