@@ -4205,11 +4205,34 @@ function openGoogleCalendarNextDue() {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
+/** Tagihan actionable berikutnya (sama seperti kartu "Tagihan mendatang"), untuk fallback WA jika jendela reminder kosong. */
+function getDashboardUpcomingPaymentsForWa() {
+  const payments = getPayments();
+  const tenants = getTenants();
+  return payments.filter(p => isActionableDueForDashboard(p, tenants))
+    .sort((a, b) => {
+      const aMs = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const bMs = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+      return aMs - bMs;
+    })
+    .slice(0, 8);
+}
+
 function buildWhatsAppReminderBody() {
   const tenants = getTenants();
-  const list = getReminderScopePayments();
-  if (!list.length) return '';
-  let msg = `${t('reminder.waHeader')}\n${new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  let list = getReminderScopePayments();
+  let mode = 'reminder';
+  if (!list.length) {
+    list = getDashboardUpcomingPaymentsForWa();
+    mode = 'upcoming';
+  }
+  if (!list.length) {
+    return t('reminder.waBodyNoBills');
+  }
+  const dateLine = new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  let msg = mode === 'reminder'
+    ? `${t('reminder.waHeader')}\n${dateLine}\n\n`
+    : `${t('reminder.waHeaderFallback')}\n${t('reminder.waNoteFallback')}\n${dateLine}\n\n`;
   list.forEach(p => {
     const tn = tenants.find(x => x.id === p.tenantId);
     const d = daysUntil(p.dueDate);
@@ -4220,7 +4243,9 @@ function buildWhatsAppReminderBody() {
     msg += `  ${p.propertyName || '-'} · ${formatRpFull(p.amount)}\n`;
     msg += `  ${formatDate(p.dueDate)} — ${status}\n\n`;
   });
-  msg += t('reminder.waFooter', { n: list.length });
+  msg += mode === 'reminder'
+    ? t('reminder.waFooter', { n: list.length })
+    : t('reminder.waFooterUpcoming', { n: list.length });
   return msg;
 }
 
@@ -4231,7 +4256,7 @@ function openWhatsAppReminderPage() {
     else alert(t('reminder.waNeedPhone'));
     return;
   }
-  let body = buildWhatsAppReminderBody();
+  const body = buildWhatsAppReminderBody();
   if (!body) {
     if (typeof showToast === 'function') showToast(t('reminder.nothingToExport'), 'info', 3200);
     return;
