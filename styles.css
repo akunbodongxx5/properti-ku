@@ -1224,7 +1224,7 @@ body {
 }
 .stress-slider-row {
   display: grid;
-  grid-template-columns: 1fr minmax(120px, 42%) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(100px, 1fr) auto;
   align-items: center;
   gap: 10px;
   font-size: 13px;
@@ -1233,14 +1233,31 @@ body {
 }
 .stress-slider-row input[type="range"] {
   width: 100%;
+  min-width: 0;
   accent-color: var(--primary);
 }
-.stress-val {
+.stress-num-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.stress-num {
+  width: 4.5rem;
+  max-width: 24vw;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.stress-pct-suffix {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
-  color: var(--primary);
-  min-width: 38px;
-  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* ===== Business calendar / reminders ===== */

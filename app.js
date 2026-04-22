@@ -4819,34 +4819,88 @@ function collectBusinessReminders(contractDays = 60, permitDays = 90) {
   return out.sort((a, b) => a.sort - b.sort);
 }
 
+const STRESS_SLIDER_MAX = 200;
+const STRESS_VALUE_MAX = 1000;
+
+function stressStorageKey(suffix) {
+  const map = { v: 'stress_vacancy_pct', r: 'stress_rent_down_pct', e: 'stress_expense_up_pct', c: 'stress_cicilan_up_pct' };
+  return map[suffix];
+}
+
+function clampStressStored(raw) {
+  const n = parseFloat(String(raw || '0').replace(',', '.'));
+  if (Number.isNaN(n) || n < 0) return 0;
+  return Math.min(STRESS_VALUE_MAX, n);
+}
+
 function getStressParams() {
   return {
-    vacancy: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_vacancy_pct') || '0') || 0)),
-    rentDown: Math.min(40, Math.max(0, parseFloat(DB.getVal('stress_rent_down_pct') || '0') || 0)),
-    expenseUp: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_expense_up_pct') || '0') || 0)),
-    cicilanUp: Math.min(50, Math.max(0, parseFloat(DB.getVal('stress_cicilan_up_pct') || '0') || 0))
+    vacancy: clampStressStored(DB.getVal('stress_vacancy_pct')),
+    rentDown: clampStressStored(DB.getVal('stress_rent_down_pct')),
+    expenseUp: clampStressStored(DB.getVal('stress_expense_up_pct')),
+    cicilanUp: clampStressStored(DB.getVal('stress_cicilan_up_pct'))
   };
 }
 
-function renderStressTest() {
-  const container = document.getElementById('stress-content');
-  if (!container) return;
-  const units = getUnits(), payments = getPayments();
+function formatStressInputField(n) {
+  if (n === (n | 0)) return String(Math.round(n));
+  return (Math.round(n * 10) / 10).toString();
+}
+
+function onStressRangeInput(suffix, el) {
+  const v = Math.min(STRESS_SLIDER_MAX, Math.max(0, parseFloat(el.value) || 0));
+  DB.setVal(stressStorageKey(suffix), String(v));
+  const num = document.getElementById('stress-in-' + suffix);
+  if (num) num.value = formatStressInputField(v);
+  if (!updateStressResultTableOnly()) renderStressTest();
+}
+
+/** onchange: full commit (avoid re-rendering on every keypress while typing multi-digit). */
+function onStressNumberCommit(suffix, el) {
+  let v = parseFloat(String(el.value).replace(',', '.'));
+  if (Number.isNaN(v) || v < 0) v = 0;
+  if (v > STRESS_VALUE_MAX) v = STRESS_VALUE_MAX;
+  el.value = formatStressInputField(v);
+  DB.setVal(stressStorageKey(suffix), String(v));
+  const range = document.getElementById('stress-range-' + suffix);
+  if (range) range.value = String(Math.min(v, STRESS_SLIDER_MAX));
+  if (!updateStressResultTableOnly()) renderStressTest();
+}
+
+/**
+ * Rebuilds only the result table & total row. Used while dragging a range so the slider DOM
+ * is not replaced by a full `renderStressTest` (avoids stutter / thumb jump).
+ * @returns {boolean} true if tbody was found and updated (or empty state was delegated)
+ */
+function updateStressResultTableOnly() {
+  const tb = document.getElementById('stress-result-tbody');
+  if (!tb) return false;
+  const b = buildStressResultTableBody();
+  if (b.empty) {
+    renderStressTest();
+    return true;
+  }
+  tb.innerHTML = b.bodyHtml;
+  return true;
+}
+
+/** @returns {{ empty: boolean, bodyHtml?: string, sumBase: number, sumStress: number }} */
+function buildStressResultTableBody() {
+  const units = getUnits();
+  const payments = getPayments();
   const props = [...new Set(units.map(u => u.property))];
+  if (!props.length) {
+    return { empty: true, bodyHtml: '', sumBase: 0, sumStress: 0 };
+  }
   const { vacancy, rentDown, expenseUp, cicilanUp } = getStressParams();
   const cy = getYear();
   const rentM = 1 - rentDown / 100;
   const vacM = 1 - vacancy / 100;
   const expM = 1 + expenseUp / 100;
   const cicM = 1 + cicilanUp / 100;
-
-  if (!props.length) {
-    container.innerHTML = '<p class="empty-state">' + t('stress.empty') + '</p>';
-    return;
-  }
-
   let rows = '';
-  let sumBase = 0, sumStress = 0;
+  let sumBase = 0;
+  let sumStress = 0;
   props.forEach(prop => {
     const pu = units.filter(u => u.property === prop);
     const pd = getPropertyData(prop);
@@ -4865,32 +4919,68 @@ function renderStressTest() {
     sumStress += stressMo;
     rows += `<tr><td style="font-weight:700">${escapeHtml(prop)}</td><td>${formatRp(Math.round(baseMo))}</td><td style="color:${stressMo >= baseMo ? 'var(--success)' : 'var(--danger)'};font-weight:700">${formatRp(Math.round(stressMo))}</td><td>${stressMo >= baseMo ? '+' : ''}${formatRp(Math.round(stressMo - baseMo))}</td></tr>`;
   });
+  const totalTr = `<tr id="stress-total-row" style="font-weight:800;background:var(--primary-glow)"><td>${t('stress.total')}</td><td>${formatRp(Math.round(sumBase))}</td><td>${formatRp(Math.round(sumStress))}</td><td>${sumStress >= sumBase ? '+' : ''}${formatRp(Math.round(sumStress - sumBase))}</td></tr>`;
+  return { empty: false, bodyHtml: rows + totalTr, sumBase, sumStress };
+}
+
+function renderStressTest() {
+  const container = document.getElementById('stress-content');
+  if (!container) return;
+  const b = buildStressResultTableBody();
+  const { vacancy, rentDown, expenseUp, cicilanUp } = getStressParams();
+
+  if (b.empty) {
+    container.innerHTML = '<p class="empty-state">' + t('stress.empty') + '</p>';
+    return;
+  }
+
+  const sVac = formatStressInputField(vacancy);
+  const sRen = formatStressInputField(rentDown);
+  const sExp = formatStressInputField(expenseUp);
+  const sCic = formatStressInputField(cicilanUp);
+  const rVac = Math.min(vacancy, STRESS_SLIDER_MAX);
+  const rRen = Math.min(rentDown, STRESS_SLIDER_MAX);
+  const rExp = Math.min(expenseUp, STRESS_SLIDER_MAX);
+  const rCic = Math.min(cicilanUp, STRESS_SLIDER_MAX);
 
   container.innerHTML = `
     ${explanationToggleBtn()}
     <div class="card">
       <h3 class="card-title">${t('stress.title')}</h3>
       <p class="yield-cap-micro">${t('stress.blurb')}</p>
+      <p class="yield-cap-micro" style="margin-top:4px;font-size:11px;opacity:0.95">${t('stress.sliderHint')}</p>
       <div class="stress-sliders" style="margin-top:16px">
         <label class="stress-slider-row">
           <span>${t('stress.vacancy')}</span>
-          <input type="range" min="0" max="40" value="${vacancy}" oninput="DB.setVal('stress_vacancy_pct',this.value);document.getElementById('sv-v').textContent=this.value+'%';renderStressTest();">
-          <span id="sv-v" class="stress-val">${vacancy}%</span>
+          <input type="range" id="stress-range-v" min="0" max="${STRESS_SLIDER_MAX}" value="${rVac}" oninput="onStressRangeInput('v', this)">
+          <div class="stress-num-wrap">
+            <input type="number" class="form-input stress-num" id="stress-in-v" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sVac}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('v', this)">
+            <span class="stress-pct-suffix" aria-hidden="true">%</span>
+          </div>
         </label>
         <label class="stress-slider-row">
           <span>${t('stress.rentDown')}</span>
-          <input type="range" min="0" max="30" value="${rentDown}" oninput="DB.setVal('stress_rent_down_pct',this.value);document.getElementById('sv-r').textContent=this.value+'%';renderStressTest();">
-          <span id="sv-r" class="stress-val">${rentDown}%</span>
+          <input type="range" id="stress-range-r" min="0" max="${STRESS_SLIDER_MAX}" value="${rRen}" oninput="onStressRangeInput('r', this)">
+          <div class="stress-num-wrap">
+            <input type="number" class="form-input stress-num" id="stress-in-r" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sRen}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('r', this)">
+            <span class="stress-pct-suffix" aria-hidden="true">%</span>
+          </div>
         </label>
         <label class="stress-slider-row">
           <span>${t('stress.expUp')}</span>
-          <input type="range" min="0" max="40" value="${expenseUp}" oninput="DB.setVal('stress_expense_up_pct',this.value);document.getElementById('sv-e').textContent=this.value+'%';renderStressTest();">
-          <span id="sv-e" class="stress-val">${expenseUp}%</span>
+          <input type="range" id="stress-range-e" min="0" max="${STRESS_SLIDER_MAX}" value="${rExp}" oninput="onStressRangeInput('e', this)">
+          <div class="stress-num-wrap">
+            <input type="number" class="form-input stress-num" id="stress-in-e" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sExp}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('e', this)">
+            <span class="stress-pct-suffix" aria-hidden="true">%</span>
+          </div>
         </label>
         <label class="stress-slider-row">
           <span>${t('stress.cicilan')}</span>
-          <input type="range" min="0" max="30" value="${cicilanUp}" oninput="DB.setVal('stress_cicilan_up_pct',this.value);document.getElementById('sv-c').textContent=this.value+'%';renderStressTest();">
-          <span id="sv-c" class="stress-val">${cicilanUp}%</span>
+          <input type="range" id="stress-range-c" min="0" max="${STRESS_SLIDER_MAX}" value="${rCic}" oninput="onStressRangeInput('c', this)">
+          <div class="stress-num-wrap">
+            <input type="number" class="form-input stress-num" id="stress-in-c" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sCic}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('c', this)">
+            <span class="stress-pct-suffix" aria-hidden="true">%</span>
+          </div>
         </label>
       </div>
     </div>
@@ -4898,9 +4988,7 @@ function renderStressTest() {
       <h3 class="card-title">${t('stress.resultTitle')}</h3>
       <div class="yield-compare-table"><table class="compare-table">
         <thead><tr><th>${t('stress.colProp')}</th><th>${t('stress.colNow')}</th><th>${t('stress.colScenario')}</th><th>${t('stress.colDelta')}</th></tr></thead>
-        <tbody>${rows}
-        <tr style="font-weight:800;background:var(--primary-glow)"><td>${t('stress.total')}</td><td>${formatRp(Math.round(sumBase))}</td><td>${formatRp(Math.round(sumStress))}</td><td>${sumStress >= sumBase ? '+' : ''}${formatRp(Math.round(sumStress - sumBase))}</td></tr>
-        </tbody></table></div>
+        <tbody id="stress-result-tbody">${b.bodyHtml}</tbody></table></div>
     </div>`;
 }
 

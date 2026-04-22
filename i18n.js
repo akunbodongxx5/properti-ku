@@ -149,6 +149,8 @@
 
       'stress.title': '⚡ Simulasi risiko',
       'stress.blurb': 'Geser untuk lihat dampak ke cashflow bulanan. Bukan prediksi — pakai untuk uji ketahanan portofolio.',
+      'stress.sliderHint': 'Slider: 0–200%. Isi angka di kotak: sampai 1000%.',
+      'stress.ariaPercent': 'Persen skenario (manual)',
       'stress.vacancy': 'Unit kosong',
       'stress.rentDown': 'Sewa turun',
       'stress.expUp': 'Biaya naik',
@@ -979,6 +981,8 @@
 
       'stress.title': '⚡ Risk simulation',
       'stress.blurb': 'Drag sliders to see impact on monthly cashflow. Not a forecast — stress-test your portfolio.',
+      'stress.sliderHint': 'Sliders: 0–200%. The number field allows up to 1000%.',
+      'stress.ariaPercent': 'Scenario % (manual entry)',
       'stress.vacancy': 'Vacancy',
       'stress.rentDown': 'Lower rent',
       'stress.expUp': 'Higher costs',
