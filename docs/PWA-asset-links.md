@@ -1,6 +1,10 @@
 # Digital Asset Links (Android / TWA / PWA Builder)
 
-File di repo: [`.well-known/assetlinks.json`](../.well-known/assetlinks.json).
+**Penting (GitHub Pages `github.io/REPO/`):** Chrome memeriksa `https://USER.github.io/.well-known/assetlinks.json` (akar **host**), sementara PWA Anda mungkin hanya memasang file di `https://USER.github.io/REPO/.well-known/`. Jika **akar** domain mengembalikan 404, bilah URL di APK TWA sering **tetap tampil** — perlu **salinan** `assetlinks.json` di repo user site `USER.github.io` (lihat [extras/github-user-pages-root/](../extras/github-user-pages-root/)).
+
+Uji otomatis: `pwsh -File scripts/verify-digital-asset-links.ps1`
+
+File utama di repo ini: [`.well-known/assetlinks.json`](../.well-known/assetlinks.json).
 
 Setelah deploy GitHub Pages, pastikan bisa dibuka di browser (tanpa login):
 
