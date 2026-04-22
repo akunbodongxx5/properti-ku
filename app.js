@@ -576,7 +576,13 @@ function getOrCreateProperty(name) {
   const props = getProperties();
   let prop = props.find(p => p.name === name);
   if (!prop) {
-    prop = { id: DB.genId(), name, purchasePrice: 0, pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0, notes: '', createdAt: new Date().toISOString() };
+    prop = {
+      id: DB.genId(), name,
+      acquisitionMode: 'property',
+      purchasePrice: 0, acquisitionCost: 0, renovationCost: 0, legalCost: 0,
+      sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0,
+      pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0, notes: '', createdAt: new Date().toISOString()
+    };
     props.push(prop);
     saveProperties(props);
   }
@@ -585,7 +591,13 @@ function getOrCreateProperty(name) {
 
 function getPropertyData(name) {
   const props = getProperties();
-  return props.find(p => p.name === name) || { purchasePrice: 0, pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0 };
+  return props.find(p => p.name === name) || {
+    name,
+    acquisitionMode: 'property',
+    purchasePrice: 0, acquisitionCost: 0, renovationCost: 0, legalCost: 0,
+    sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0,
+    pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0
+  };
 }
 
 function getPropertyAnnualCost(propData) {
@@ -614,6 +626,89 @@ function getAllUnitsAnnualCost(units) {
 
 function getPropertyAnnualCostWithCicilan(propData) {
   return getPropertyAnnualCost(propData) + ((propData.cicilanPerBulan || 0) * 12);
+}
+
+/** Modal / akuisisi: `property` = satu gedung; `unit` = beli per unit apartemen + biaya bersama opsional */
+function getPropertyAcquisitionMode(pd) {
+  return pd && pd.acquisitionMode === 'unit' ? 'unit' : 'property';
+}
+
+function getUnitAcquisition(u) {
+  return u && u.acquisition && typeof u.acquisition === 'object' ? u.acquisition : {};
+}
+
+function getUnitAcquisitionTotal(unit) {
+  const a = getUnitAcquisition(unit);
+  return (parseFloat(a.purchasePrice) || 0)
+    + (parseFloat(a.acquisitionCost) || 0)
+    + (parseFloat(a.renovationCost) || 0)
+    + (parseFloat(a.furnishingCost) || 0)
+    + (parseFloat(a.legalCost) || 0);
+}
+
+function getUnitMonthlyMortgage(unit) {
+  return +(getUnitAcquisition(unit).monthlyMortgage || 0);
+}
+
+function getPropertySharedAcquisitionTotal(prop) {
+  return (prop.sharedSetupCost || 0) + (prop.sharedRenovationCost || 0) + (prop.sharedLegalCost || 0);
+}
+
+/** Total modal untuk yield/ROI (IDR). */
+function getPropertyAcquisitionTotal(prop, unitsAll) {
+  const units = Array.isArray(unitsAll)
+    ? unitsAll.filter(u => u.property === prop.name)
+    : [];
+  if (getPropertyAcquisitionMode(prop) === 'unit') {
+    return units.reduce((s, u) => s + getUnitAcquisitionTotal(u), 0) + getPropertySharedAcquisitionTotal(prop);
+  }
+  return (prop.purchasePrice || 0)
+    + (prop.acquisitionCost || 0)
+    + (prop.renovationCost || 0)
+    + (prop.legalCost || 0);
+}
+
+/** Cicilan bulanan agregat (IDR/bln): properti atau sum unit. */
+function getPropertyMonthlyMortgageTotal(prop, unitsAll) {
+  const units = Array.isArray(unitsAll)
+    ? unitsAll.filter(u => u.property === prop.name)
+    : [];
+  if (getPropertyAcquisitionMode(prop) === 'unit') {
+    return units.reduce((s, u) => s + getUnitMonthlyMortgage(u), 0);
+  }
+  return +(prop.cicilanPerBulan || 0);
+}
+
+/** Sisa tenor (bulan): properti = field properti; unit = max sisa tenor per unit. */
+function getPropertyMortgageTenorMonths(prop, unitsAll) {
+  if (getPropertyAcquisitionMode(prop) !== 'unit') {
+    return +(prop.sisaTenor || 0);
+  }
+  const units = Array.isArray(unitsAll)
+    ? unitsAll.filter(u => u.property === prop.name)
+    : [];
+  return units.reduce((m, u) => Math.max(m, +(getUnitAcquisition(u).mortgageRemainingMonths || 0)), 0);
+}
+
+function togglePropertyAcquisitionBlocks(mode) {
+  const m = mode === 'unit' ? 'unit' : 'property';
+  const b = document.getElementById('prop-acq-building');
+  const s = document.getElementById('prop-acq-shared');
+  if (b) b.style.display = m === 'property' ? 'block' : 'none';
+  if (s) s.style.display = m === 'unit' ? 'block' : 'none';
+}
+
+function syncUnitAcquisitionSection() {
+  const sel = document.querySelector('#modal-overlay form [name="propertySelect"]');
+  const wrap = document.getElementById('unit-acq-wrap');
+  if (!wrap) return;
+  const v = sel ? sel.value : '';
+  if (!v || v === '__new__') {
+    wrap.style.display = 'none';
+    return;
+  }
+  const pd = getPropertyData(v);
+  wrap.style.display = getPropertyAcquisitionMode(pd) === 'unit' ? 'block' : 'none';
 }
 
 // ===== Subtype Templates =====
@@ -916,6 +1011,7 @@ function onPropertySelect(val) {
     autoFillFacilities();
     autoFillPrice();
   }
+  syncUnitAcquisitionSection();
 }
 
 function autoFillFacilities() {
@@ -1049,6 +1145,7 @@ function showUnitForm(editId) {
   const existingSubtypes = u ? [...new Set(units.filter(x => x.property === u.property && x.subtype).map(x => x.subtype))] : [];
 
   const _rentPeriod = u?.billingCycle === 'yearly' ? t('form.periodYear') : t('form.periodMonth');
+  const ua = getUnitAcquisition(u || {});
   openModal(u ? t('unit.editTitle') : t('unit.addNewTitle'), `
     <form onsubmit="saveUnit(event,'${editId||''}')">
       <div class="form-group"><label class="form-label">${t('form.propName')}</label>
@@ -1100,6 +1197,33 @@ function showUnitForm(editId) {
             <input class="form-input" name="unitOtherCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${u?.unitOtherCost ? formatNumDots(u.unitOtherCost) : ''}"></div>
         </div>
       </div>
+      <div id="unit-acq-wrap" class="unit-acquisition-card" style="display:none">
+        <div class="prop-settings-divider"></div>
+        <div class="form-group"><label class="form-label">${t('form.unitAcquisitionTitle')}</label>
+          <small style="color:var(--text-muted);display:block;margin-bottom:10px;line-height:1.45">${t('form.unitAcquisitionHint')}</small>
+          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaPurchasePrice')}</label>
+              <input class="form-input" name="uaPurchasePrice" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.purchasePrice ? formatNumDots(ua.purchasePrice) : ''}"></div>
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaAcquisitionCost')}</label>
+              <input class="form-input" name="uaAcquisitionCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.acquisitionCost ? formatNumDots(ua.acquisitionCost) : ''}"></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaRenoCost')}</label>
+              <input class="form-input" name="uaRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.renovationCost ? formatNumDots(ua.renovationCost) : ''}"></div>
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaFurnishingCost')}</label>
+              <input class="form-input" name="uaFurnishingCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.furnishingCost ? formatNumDots(ua.furnishingCost) : ''}"></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaLegalCost')}</label>
+              <input class="form-input" name="uaLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.legalCost ? formatNumDots(ua.legalCost) : ''}"></div>
+            <div style="flex:1;min-width:140px"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaMortgageMo')}</label>
+              <input class="form-input" name="uaMonthlyMortgage" type="text" inputmode="numeric" data-rp placeholder="0" value="${ua.monthlyMortgage ? formatNumDots(ua.monthlyMortgage) : ''}"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-secondary);font-weight:600">${t('form.uaMortgageTenorMo')}</label>
+            <input class="form-input" name="uaMortgageRemainingMonths" type="number" min="0" placeholder="0" value="${ua.mortgageRemainingMonths != null ? ua.mortgageRemainingMonths : ''}">
+            <small style="color:var(--text-muted);font-size:11px">${t('form.uaMortgageTenorHint')}</small></div>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">${t('form.facilities')}</label>
         ${buildChipsHtml(_selectedFacilities)}</div>
       <div class="form-group"><label class="form-label">${t('form.status')}</label>
@@ -1113,7 +1237,10 @@ function showUnitForm(editId) {
     </form>
     <script>document.querySelector('[name="billingCycle"]').addEventListener('change',function(){var y=this.value==='yearly';document.getElementById('price-label').textContent=typeof t==='function'?t('form.rentPrice',{period:y?t('form.periodYear'):t('form.periodMonth')}):('Harga Sewa / '+(y?'Tahun':'Bulan')+' (Rp)')})<\/script>
   `);
-  setTimeout(() => initRpInputs(), 50);
+  setTimeout(() => {
+    initRpInputs();
+    syncUnitAcquisitionSection();
+  }, 50);
 }
 
 function saveUnit(e, editId) {
@@ -1149,12 +1276,27 @@ function saveUnit(e, editId) {
     }
   }
 
+  const pdProp = getPropertyData(property);
+  let acquisition = {};
+  if (getPropertyAcquisitionMode(pdProp) === 'unit') {
+    acquisition = {
+      purchasePrice: parseNum(f.uaPurchasePrice?.value) || 0,
+      acquisitionCost: parseNum(f.uaAcquisitionCost?.value) || 0,
+      renovationCost: parseNum(f.uaRenovationCost?.value) || 0,
+      furnishingCost: parseNum(f.uaFurnishingCost?.value) || 0,
+      legalCost: parseNum(f.uaLegalCost?.value) || 0,
+      monthlyMortgage: parseNum(f.uaMonthlyMortgage?.value) || 0,
+      mortgageRemainingMonths: Number(f.uaMortgageRemainingMonths?.value) || 0
+    };
+  }
+
   const data = {
     id: editId || DB.genId(), property, subtype, name: f.name.value.trim(),
     type: f.type.value, price: newPrice, billingCycle: f.billingCycle.value,
     ipl: parseNum(f.ipl.value) || 0, sinkingFund: parseNum(f.sinkingFund.value) || 0,
     unitPbb: parseNum(f.unitPbb.value) || 0, unitOtherCost: parseNum(f.unitOtherCost.value) || 0,
     facilities: newFacilities, status: f.status.value,
+    acquisition,
     rentHistory,
     createdAt: editId ? (getUnits().find(x=>x.id===editId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
@@ -2128,7 +2270,7 @@ function renderOverview() {
   const te = pp.filter(p=>p.type==='expense').reduce((s,p)=>s+p.amount,0);
   const net = ti - te;
   const allProps = getProperties();
-  const tpp = allProps.reduce((s,p)=>s+(p.purchasePrice||0),0);
+  const tpp = allProps.reduce((s, p) => s + getPropertyAcquisitionTotal(p, units), 0);
   const totalFixedCosts = allProps.reduce((s,p)=>s+getPropertyAnnualCost(p),0);
   const an = reportPeriod==='month' ? net*12 : net;
   const y = tpp>0 ? (((an - (reportPeriod==='month' ? totalFixedCosts/12 : totalFixedCosts)) / tpp)*100).toFixed(1) : '-';
@@ -2179,7 +2321,7 @@ function buildOverviewExportContext() {
   const te = pp.filter(p => p.type === 'expense').reduce((s, p) => s + p.amount, 0);
   const net = ti - te;
   const allProps = getProperties();
-  const tpp = allProps.reduce((s, p) => s + (p.purchasePrice || 0), 0);
+  const tpp = allProps.reduce((s, p) => s + getPropertyAcquisitionTotal(p, units), 0);
   const totalFixedCosts = allProps.reduce((s, p) => s + getPropertyAnnualCost(p), 0);
   const an = reportPeriod === 'month' ? net * 12 : net;
   const y = tpp > 0 ? (((an - (reportPeriod === 'month' ? totalFixedCosts / 12 : totalFixedCosts)) / tpp) * 100).toFixed(1) : '-';
@@ -2497,9 +2639,10 @@ function renderYield() {
   let cardsHtml = props.map(prop => {
     const pu = units.filter(u=>u.property===prop);
     const pd = getPropertyData(prop);
-    const purchasePrice = pd.purchasePrice || 0;
+    const acquisitionTotal = getPropertyAcquisitionTotal(pd, units);
+    const acqMode = getPropertyAcquisitionMode(pd);
     const fixedCosts = getPropertyAnnualCost(pd);
-    const cicilanPerBulan = pd.cicilanPerBulan || 0;
+    const cicilanPerBulan = getPropertyMonthlyMortgageTotal(pd, units);
     const cicilanPerTahun = cicilanPerBulan * 12;
     const sisaTenor = pd.sisaTenor || 0;
 
@@ -2523,15 +2666,15 @@ function renderYield() {
     // Total with cicilan — for real cashflow
     const totalWithCicilan = totalAnnualExpense + cicilanPerTahun;
 
-    const grossYield = purchasePrice > 0 ? ((yearIncome / purchasePrice) * 100).toFixed(2) : '-';
-    const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(2) : '-';
-    const fullNetYieldNum = purchasePrice > 0 ? ((yearIncomeIfFull - totalAnnualExpense) / purchasePrice) * 100 : NaN;
-    const effectiveYield = purchasePrice > 0 && !isNaN(fullNetYieldNum) ? fullNetYieldNum.toFixed(2) : '-';
+    const grossYield = acquisitionTotal > 0 ? ((yearIncome / acquisitionTotal) * 100).toFixed(2) : '-';
+    const netYield = acquisitionTotal > 0 ? (((yearIncome - totalAnnualExpense) / acquisitionTotal) * 100).toFixed(2) : '-';
+    const fullNetYieldNum = acquisitionTotal > 0 ? ((yearIncomeIfFull - totalAnnualExpense) / acquisitionTotal) * 100 : NaN;
+    const effectiveYield = acquisitionTotal > 0 && !isNaN(fullNetYieldNum) ? fullNetYieldNum.toFixed(2) : '-';
 
     const netAnnualProfit = yearIncome - totalAnnualExpense;
     const cashflowAfterCicilan = yearIncome - totalWithCicilan;
     const monthlyCashflow = Math.round(cashflowAfterCicilan / 12);
-    const paybackYears = purchasePrice > 0 && netAnnualProfit > 0 ? (purchasePrice / netAnnualProfit).toFixed(1) : '-';
+    const paybackYears = acquisitionTotal > 0 && netAnnualProfit > 0 ? (acquisitionTotal / netAnnualProfit).toFixed(1) : '-';
     const paybackLabel = formatPaybackLabel(paybackYears);
 
     // Badge color
@@ -2549,7 +2692,8 @@ function renderYield() {
         <span class="yield-card-badge" style="background:${badgeColor}20;color:${badgeColor}">${netYield !== '-' ? t('rpt.netRentBadge', { pct: netYield }) : t('rpt.notFilledShort')}</span>
       </div>
       <div class="yield-section-title">${t('rpt.investmentSection')}</div>
-      <div class="yield-row"><span>${t('rpt.purchasePrice')}</span><span style="font-weight:700">${purchasePrice>0?formatRpFull(purchasePrice):'<span style="color:var(--warning-dark)">' + escapeHtml(t('rpt.notFilledShort')) + '</span>'}</span></div>
+      <div class="yield-row"><span>${acqMode === 'unit' ? t('rpt.totalCapital') : t('rpt.purchasePrice')}</span><span style="font-weight:700">${acquisitionTotal>0?formatRpFull(acquisitionTotal):'<span style="color:var(--warning-dark)">' + escapeHtml(t('rpt.notFilledShort')) + '</span>'}</span></div>
+      ${acqMode === 'unit' && pu.length ? `<div class="yield-compare-table" style="margin:6px 0 10px 0"><table class="compare-table" style="font-size:12px"><thead><tr><th>${t('rpt.colUnit')}</th><th>${t('rpt.unitCapitalShort')}</th><th>${t('rpt.unitMortgageMo')}</th></tr></thead><tbody>` + pu.map(ux => `<tr><td>${escapeHtml(ux.name)}</td><td>${formatRp(getUnitAcquisitionTotal(ux))}</td><td>${getUnitMonthlyMortgage(ux) > 0 ? formatRp(getUnitMonthlyMortgage(ux)) : '—'}</td></tr>`).join('') + `</tbody></table></div>` : ''}
       <div class="yield-section-title">${t('rpt.incomeSection')}</div>
       <div class="yield-row"><span>${t('rpt.actualRentMo', { n: occCount })}</span><span style="color:var(--success)">${formatRp(monthlyRent)}</span></div>
       <div class="yield-row"><span>${t('rpt.potentialRentMo', { n: pu.length })}</span><span>${formatRp(potentialRent)}</span></div>
@@ -2568,7 +2712,8 @@ function renderYield() {
         <div class="yield-section-title">${t('rpt.bankLoanSection')}</div>
         <div class="yield-row sub"><span>${t('rpt.installmentMo')}</span><span style="color:var(--danger)">${formatRp(cicilanPerBulan)}</span></div>
         <div class="yield-row sub"><span>${t('rpt.installmentYr')}</span><span style="color:var(--danger)">${formatRp(cicilanPerTahun)}</span></div>
-        ${sisaTenor > 0 ? `<div class="yield-row sub"><span>${t('rpt.tenorRemain')}</span><span>${formatSisaTenorMonths(sisaTenor)}</span></div>` : ''}
+        ${acqMode !== 'unit' && sisaTenor > 0 ? `<div class="yield-row sub"><span>${t('rpt.tenorRemain')}</span><span>${formatSisaTenorMonths(sisaTenor)}</span></div>` : ''}
+        ${acqMode === 'unit' && cicilanPerBulan > 0 ? `<div class="yield-row sub"><span>${t('rpt.tenorRemain')}</span><span style="color:var(--text-muted)">${escapeHtml(t('rpt.tenorPerUnitHint'))}</span></div>` : ''}
         <div class="yield-row"><span>${t('rpt.totalPlusInstallmentYr')}</span><span style="color:var(--danger);font-weight:700">${formatRp(totalWithCicilan)}</span></div>
       ` : ''}
       <div class="yield-divider"></div>
@@ -2655,9 +2800,10 @@ function renderProyeksi() {
   const cardsHtml = props.map(prop => {
     const pu = units.filter(u=>u.property===prop);
     const pd = getPropertyData(prop);
-    const purchasePrice = pd.purchasePrice || 0;
+    const acqMode = getPropertyAcquisitionMode(pd);
+    const acquisitionTotal = getPropertyAcquisitionTotal(pd, units);
     const fixedCosts = getPropertyAnnualCost(pd);
-    const cicilanPerBulan = pd.cicilanPerBulan || 0;
+    const cicilanPerBulan = getPropertyMonthlyMortgageTotal(pd, units);
     const cicilanPerTahun = cicilanPerBulan * 12;
 
     const occCount = pu.filter(u=>u.status==='occupied').length;
@@ -2670,7 +2816,7 @@ function renderProyeksi() {
     const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
     const netAnnualProfit = yearIncome - totalAnnualExpense;
 
-    const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(2) : '-';
+    const netYield = acquisitionTotal > 0 ? (((yearIncome - totalAnnualExpense) / acquisitionTotal) * 100).toFixed(2) : '-';
 
     const propCapEff = effectiveYieldCapPct(prop, capPct);
     const usesGlobalCap = !Object.prototype.hasOwnProperty.call(capOverrideMap, prop);
@@ -2678,7 +2824,7 @@ function renderProyeksi() {
 
     // Comparison row
     if (props.length > 1) {
-      const paperGain = purchasePrice > 0 ? Math.round(purchasePrice * (Math.pow(1 + propCapEff/100, capYears) - 1)) : null;
+      const paperGain = acquisitionTotal > 0 ? Math.round(acquisitionTotal * (Math.pow(1 + propCapEff/100, capYears) - 1)) : null;
       compHtml += `<tr onclick="showPropertySettings(${onclickStrArg(prop)})">
         <td style="font-weight:700">${escapeHtml(prop)}</td>
         <td>${netYield !== '-' ? netYield+'%' : '-'}</td>
@@ -2690,11 +2836,11 @@ function renderProyeksi() {
 
     // Per-property projection card
     let capGainSection = '';
-    if (purchasePrice > 0) {
+    if (acquisitionTotal > 0) {
       const netYNum = netYield !== '-' ? parseFloat(netYield) : null;
       const incomeYieldPct = netYNum;
-      const fv = purchasePrice * Math.pow(1 + propCapEff / 100, capYears);
-      const capGainAmt = Math.round(fv - purchasePrice);
+      const fv = acquisitionTotal * Math.pow(1 + propCapEff / 100, capYears);
+      const capGainAmt = Math.round(fv - acquisitionTotal);
       const cumRent = cumNetOperasionalOverYears(netAnnualProfit, capYears, rentEscPct);
       const combinedEst = capGainAmt + cumRent;
 
@@ -2715,7 +2861,7 @@ function renderProyeksi() {
       </div>
       <div class="yield-divider"></div>
       <div class="yield-section-title">${t('rpt.projNYears', { n: capYears })}</div>
-      <div class="yield-row"><span>${t('rpt.purchasePriceLower')}</span><span style="font-weight:700">${formatRpFull(purchasePrice)}</span></div>
+      <div class="yield-row"><span>${acqMode === 'unit' ? t('rpt.totalCapitalLower') : t('rpt.purchasePriceLower')}</span><span style="font-weight:700">${formatRpFull(acquisitionTotal)}</span></div>
       <div class="yield-row"><span>${t('rpt.estAssetValue')}</span><span style="font-weight:700">${formatRpFull(Math.round(fv))}</span></div>
       <div class="yield-row highlight"><span>${t('rpt.estValueGain')}</span><span style="color:${capGainAmt >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700">${capGainAmt >= 0 ? '+' : ''}${formatRpFull(capGainAmt)}</span></div>
       <div class="yield-row sub"><span>${t('rpt.cumRentNYears', { n: capYears, esc: rentEscLabel })}</span><span style="color:${cumRent >= 0 ? 'var(--success)' : 'var(--danger)'}">${cumRent >= 0 ? '+' : ''}${formatRpFull(cumRent)}</span></div>
@@ -2825,7 +2971,7 @@ function renderMultiProperty() {
   container.innerHTML = props.map(prop => {
     const pu = units.filter(u=>u.property===prop);
     const pd = getPropertyData(prop);
-    const purchasePrice = pd.purchasePrice || 0;
+    const acquisitionTotal = getPropertyAcquisitionTotal(pd, units);
     const fixedCosts = getPropertyAnnualCost(pd);
     const occCount = pu.filter(u=>u.status==='occupied').length;
     const vacCount = pu.length - occCount;
@@ -2840,9 +2986,9 @@ function renderMultiProperty() {
     const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
     const unitsCostMulti = getAllUnitsAnnualCost(pu);
     const totalAnnualExpense = fixedCosts + unitsCostMulti + recordedExpense;
-    const netYield = purchasePrice > 0 ? (((yearIncome - totalAnnualExpense) / purchasePrice) * 100).toFixed(1) : '-';
+    const netYield = acquisitionTotal > 0 ? (((yearIncome - totalAnnualExpense) / acquisitionTotal) * 100).toFixed(1) : '-';
     const netProfit = yearIncome - totalAnnualExpense;
-    const paybackYears = purchasePrice > 0 && netProfit > 0 ? (purchasePrice / netProfit).toFixed(1) : '-';
+    const paybackYears = acquisitionTotal > 0 && netProfit > 0 ? (acquisitionTotal / netProfit).toFixed(1) : '-';
     const paybackLabel = formatPaybackLabel(paybackYears);
     const propTenants = tenants.filter(t => pu.some(u=>u.id===t.unitId));
     const overdueCount = payments.filter(p =>
@@ -2866,7 +3012,7 @@ function renderMultiProperty() {
       <div class="mp-yield-row">
         <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.rentalYield')}</span><span class="mp-yield-value" style="color:var(--primary)">${netYield !== '-' ? netYield + '%' : '-'}</span></div>
         <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.payback')}</span><span class="mp-yield-value">${paybackLabel}</span></div>
-        <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.investasiShort')}</span><span class="mp-yield-value">${purchasePrice > 0 ? formatRp(purchasePrice) : '-'}</span></div>
+        <div class="mp-yield-item"><span class="mp-yield-label">${t('rpt.investasiShort')}</span><span class="mp-yield-value">${acquisitionTotal > 0 ? formatRp(acquisitionTotal) : '-'}</span></div>
       </div>
       <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-secondary)">
         <span>${t('rpt.potentialPerMo', { v: formatRp(potentialRent) })}</span>
@@ -2908,7 +3054,8 @@ function renderKPRSimulator() {
           <option value="">${escapeHtml(t('kpr.customManual'))}</option>
           ${props.map(p => {
             const pd = getPropertyData(p);
-            return `<option value="${escapeHtml(p)}" ${d.selectedProperty === p ? 'selected' : ''}>${escapeHtml(p)}${pd.purchasePrice ? ' — ' + formatRp(pd.purchasePrice) : ''}</option>`;
+            const acqHint = getPropertyAcquisitionTotal(pd, units);
+            return `<option value="${escapeHtml(p)}" ${d.selectedProperty === p ? 'selected' : ''}>${escapeHtml(p)}${acqHint ? ' — ' + formatRp(acqHint) : ''}</option>`;
           }).join('')}
         </select></div>` : ''}
 
@@ -2992,20 +3139,24 @@ function kprSelectProperty(propName) {
   const unitsCost = getAllUnitsAnnualCost(propUnits);
   const propCost = getPropertyAnnualCost(pd);
 
+  const acqTotal = getPropertyAcquisitionTotal(pd, propUnits);
+  const tenorMo = getPropertyMortgageTenorMonths(pd, propUnits);
+  const aggCicilan = getPropertyMonthlyMortgageTotal(pd, propUnits);
+
   // Auto-fill from real data
-  if (pd.purchasePrice) document.getElementById('kpr-harga').value = formatNumDots(pd.purchasePrice);
+  if (acqTotal > 0) document.getElementById('kpr-harga').value = formatNumDots(acqTotal);
   if (potentialRent > 0) document.getElementById('kpr-sewa-awal').value = formatNumDots(potentialRent);
 
-  // Fill existing cicilan if property has KPR data
-  if (pd.cicilanPerBulan && pd.sisaTenor) {
-    document.getElementById('kpr-tenor').value = Math.ceil(pd.sisaTenor / 12) || 20;
+  // Fill tenor from remaining loan months when cicilan data exists
+  if (aggCicilan > 0 && tenorMo > 0) {
+    document.getElementById('kpr-tenor').value = Math.ceil(tenorMo / 12) || 20;
   }
 
   _kprState = { ..._kprState, selectedProperty: propName };
 
   // Show auto-fill summary
   const parts = [];
-  if (pd.purchasePrice) parts.push(t('kpr.partPurchase'));
+  if (acqTotal > 0) parts.push(getPropertyAcquisitionMode(pd) === 'unit' ? t('kpr.partTotalCapital') : t('kpr.partPurchase'));
   if (potentialRent > 0) parts.push(t('kpr.partRentUnits', { rent: formatRp(potentialRent), n: propUnits.length }));
   if (parts.length) showToast(t('msg.propPrefill', { name: propName, parts: parts.join(', ') }), 'info', 3000);
 
@@ -3435,6 +3586,10 @@ function saveKPRToProperty(propName, cicilanPerBulan, sisaTenor) {
     alert(t('msg.saveKprFail'));
     return;
   }
+  if (getPropertyAcquisitionMode(prop) === 'unit') {
+    alert(t('msg.saveKprUnitMode'));
+    return;
+  }
   prop.cicilanPerBulan = cicilanPerBulan;
   prop.sisaTenor = sisaTenor;
   saveProperties(props);
@@ -3470,6 +3625,8 @@ function showPropertySettings(propName) {
     </div>`;
   }
 
+  const acqMode = getPropertyAcquisitionMode(pd);
+
   openModal(t('prop.settingsTitle', { name: propName }), `
     <form onsubmit="savePropertySettings(event, ${onclickStrArg(propName)})">
       <div class="form-group"><label class="form-label">${t('form.propName')}</label>
@@ -3484,9 +3641,42 @@ function showPropertySettings(propName) {
       <div class="form-group"><label class="form-label">${t('form.ownerKtp')}</label>
         <input class="form-input" name="ownerKTP" value="${pd.ownerKTP||''}" placeholder="${t('form.ownerKtpPh')}"></div>
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">${t('form.purchasePrice')}</label>
-        <input class="form-input" name="purchasePrice" type="text" inputmode="numeric" data-rp placeholder="500.000.000" value="${pd.purchasePrice ? formatNumDots(pd.purchasePrice) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">${t('form.purchaseHint')}</small></div>
+      <div class="form-group"><label class="form-label">${t('form.acquisitionMode')}</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="cursor:pointer;font-weight:600"><input type="radio" name="acquisitionMode" value="property" ${acqMode === 'property' ? 'checked' : ''} onclick="togglePropertyAcquisitionBlocks('property')"> ${t('form.acqPerProperty')}</label>
+          <label style="cursor:pointer;font-weight:600"><input type="radio" name="acquisitionMode" value="unit" ${acqMode === 'unit' ? 'checked' : ''} onclick="togglePropertyAcquisitionBlocks('unit')"> ${t('form.acqPerUnit')}</label>
+        </div>
+        <small style="color:var(--text-muted);font-size:12px;display:block;margin-top:8px">${t('form.acquisitionModeHint')}</small></div>
+      <div id="prop-acq-building" style="display:${acqMode === 'property' ? 'block' : 'none'}">
+        <div class="form-group"><label class="form-label">${t('form.purchasePrice')}</label>
+          <input class="form-input" name="purchasePrice" type="text" inputmode="numeric" data-rp placeholder="500.000.000" value="${pd.purchasePrice ? formatNumDots(pd.purchasePrice) : ''}">
+          <small style="color:var(--text-muted);font-size:12px">${t('form.purchaseHint')}</small></div>
+        <div class="form-group"><label class="form-label">${t('form.acquisitionCost')}</label>
+          <input class="form-input" name="acquisitionCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.acquisitionCost ? formatNumDots(pd.acquisitionCost) : ''}">
+          <small style="color:var(--text-muted);font-size:12px">${t('form.acquisitionCostHint')}</small></div>
+        <div class="form-group"><label class="form-label">${t('form.renoCostOnce')}</label>
+          <input class="form-input" name="renovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.renovationCost ? formatNumDots(pd.renovationCost) : ''}"></div>
+        <div class="form-group"><label class="form-label">${t('form.legalCostOnce')}</label>
+          <input class="form-input" name="legalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.legalCost ? formatNumDots(pd.legalCost) : ''}"></div>
+        <div class="prop-settings-divider"></div>
+        <div class="form-group"><label class="form-label">${t('form.cicilanMo')}</label>
+          <input class="form-input" name="cicilanPerBulan" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.cicilanPerBulan ? formatNumDots(pd.cicilanPerBulan) : ''}">
+          <small style="color:var(--text-muted);font-size:12px">${t('form.cicilanHint')}</small></div>
+        <div class="form-group"><label class="form-label">${t('form.tenorLeft')}</label>
+          <input class="form-input" name="sisaTenor" type="number" placeholder="0" value="${pd.sisaTenor || ''}">
+          <small style="color:var(--text-muted);font-size:12px">${t('form.tenorHint')}</small></div>
+      </div>
+      <div id="prop-acq-shared" style="display:${acqMode === 'unit' ? 'block' : 'none'}">
+        <div class="form-group"><label class="form-label">${t('form.sharedSetupCost')}</label>
+          <input class="form-input" name="sharedSetupCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedSetupCost ? formatNumDots(pd.sharedSetupCost) : ''}">
+          <small style="color:var(--text-muted);font-size:12px">${t('form.sharedSetupHint')}</small></div>
+        <div class="form-group"><label class="form-label">${t('form.sharedRenoCost')}</label>
+          <input class="form-input" name="sharedRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedRenovationCost ? formatNumDots(pd.sharedRenovationCost) : ''}"></div>
+        <div class="form-group"><label class="form-label">${t('form.sharedLegalCost')}</label>
+          <input class="form-input" name="sharedLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedLegalCost ? formatNumDots(pd.sharedLegalCost) : ''}"></div>
+        <small style="color:var(--text-muted);font-size:12px;display:block;margin-bottom:12px">${t('form.sharedCostsFooter')}</small>
+      </div>
+      <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">${t('form.pbbYr')}</label>
         <input class="form-input" name="pbb" type="text" inputmode="numeric" data-rp placeholder="2.000.000" value="${pd.pbb ? formatNumDots(pd.pbb) : ''}">
         <small style="color:var(--text-muted);font-size:12px">${t('form.pbbHint')}</small></div>
@@ -3512,13 +3702,6 @@ function showPropertySettings(propName) {
         <input class="form-input" name="otherExpense" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.otherExpense ? formatNumDots(pd.otherExpense) : ''}">
         <small style="color:var(--text-muted);font-size:12px">${t('form.otherYrHint')}</small></div>
       <div class="prop-settings-divider"></div>
-      <div class="form-group"><label class="form-label">${t('form.cicilanMo')}</label>
-        <input class="form-input" name="cicilanPerBulan" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.cicilanPerBulan ? formatNumDots(pd.cicilanPerBulan) : ''}">
-        <small style="color:var(--text-muted);font-size:12px">${t('form.cicilanHint')}</small></div>
-      <div class="form-group"><label class="form-label">${t('form.tenorLeft')}</label>
-        <input class="form-input" name="sisaTenor" type="number" placeholder="0" value="${pd.sisaTenor||''}">
-        <small style="color:var(--text-muted);font-size:12px">${t('form.tenorHint')}</small></div>
-      <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">${t('form.notes')}</label>
         <textarea class="form-textarea" name="notes" placeholder="${t('form.propNotesPh')}">${pd.notes||''}</textarea></div>
       <button type="submit" class="btn btn-primary">${t('form.save')}</button>
@@ -3526,7 +3709,10 @@ function showPropertySettings(propName) {
     <div class="prop-settings-divider"></div>
     <button class="btn btn-danger" onclick="deleteProperty(${onclickStrArg(propName)})">${t('prop.deleteAll')}</button>
   `);
-  setTimeout(() => initRpInputs(), 50);
+  setTimeout(() => {
+    initRpInputs();
+    togglePropertyAcquisitionBlocks(acqMode);
+  }, 50);
 }
 
 function savePropertySettings(e, oldPropName) {
@@ -3573,7 +3759,14 @@ function savePropertySettings(e, oldPropName) {
   prop.ownerName = f.ownerName.value.trim();
   prop.ownerAddress = f.ownerAddress.value.trim();
   prop.ownerKTP = f.ownerKTP.value.trim();
+  prop.acquisitionMode = (f.acquisitionMode && f.acquisitionMode.value === 'unit') ? 'unit' : 'property';
   prop.purchasePrice = parseNum(f.purchasePrice.value) || 0;
+  prop.acquisitionCost = parseNum(f.acquisitionCost?.value) || 0;
+  prop.renovationCost = parseNum(f.renovationCost?.value) || 0;
+  prop.legalCost = parseNum(f.legalCost?.value) || 0;
+  prop.sharedSetupCost = parseNum(f.sharedSetupCost?.value) || 0;
+  prop.sharedRenovationCost = parseNum(f.sharedRenovationCost?.value) || 0;
+  prop.sharedLegalCost = parseNum(f.sharedLegalCost?.value) || 0;
   prop.pbb = parseNum(f.pbb.value) || 0;
   prop.pbbDueMonth = f.pbbDueMonth?.value ? Number(f.pbbDueMonth.value) : '';
   prop.pbbDueDay = f.pbbDueDay?.value ? Number(f.pbbDueDay.value) : '';
@@ -4651,7 +4844,7 @@ function renderROICards() {
 
   container.innerHTML = props.map(prop => {
     const pd = getPropertyData(prop);
-    const totalInvestment = pd.purchasePrice || 0;
+    const totalInvestment = getPropertyAcquisitionTotal(pd, units);
     if (totalInvestment <= 0) return '';
 
     const pu = units.filter(u => u.property === prop);
@@ -4909,7 +5102,7 @@ function buildStressResultTableBody() {
     const unitsCost = getAllUnitsAnnualCost(pu);
     const fixedCosts = getPropertyAnnualCost(pd);
     const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
-    const cicilan = pd.cicilanPerBulan || 0;
+    const cicilan = getPropertyMonthlyMortgageTotal(pd, units);
     const baseMo = monthlyRent - totalAnnualExpense / 12 - cicilan;
     const adjRent = monthlyRent * rentM * vacM;
     const adjExp = (totalAnnualExpense / 12) * expM;
