@@ -1,12 +1,8 @@
-[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "REPLACE_WITH_ANDROID_PACKAGE_NAME",
-      "sha256_cert_fingerprints": [
-        "REPLACE_WITH_SHA256_FINGERPRINT"
-      ]
-    }
-  }
-]
+﻿[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.akunbodongxx5.twa",
+        "sha256_cert_fingerprints": ["A0:DF:A2:66:F6:DB:98:22:62:1A:03:50:54:3F:17:C9:8B:4B:24:42:97:B7:7B:60:4C:4A:0F:B1:8C:7F:69:8C"]
+      }
+    }]
