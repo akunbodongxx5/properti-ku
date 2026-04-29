@@ -25,12 +25,23 @@ Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Li
 
 Butuh server HTTP statis (bukan `file://`) agar Service Worker dan fitur yang memanggil API eksternal berfungsi.
 
+### Dua jalur preview (Raw vs monetization experiment)
+
+| Versi | Branch | Server lokal | Preview |
+|--------|--------|----------------|---------|
+| **Raw** (kode di `main` ini) | `main` | [`serve.bat`](serve.bat) atau [`server.ps1`](server.ps1) — port default **61036** | [http://localhost:61036/](http://localhost:61036/) |
+| **Monetized (eksperimental)** | `experiment/monetization` | Di checkout branch itu, jalankan [`serve-experiment.bat`](serve-experiment.bat) (`PORT=61037`) | [http://localhost:61037/](http://localhost:61037/) |
+
+**Dua server sekaligus:** pakai [git worktree](https://git-scm.com/docs/git-worktree) supaya dua folder & dua branch; jalankan `serve.bat` di satu folder dan `serve-experiment.bat` di worktree branch eksperimen. Lihat [`docs/experiments/monetization-branch.md`](docs/experiments/monetization-branch.md).
+
+**Fork di GitHub:** setelah `git push -u origin experiment/monetization`, buat PR dari branch itu atau biarkan sebagai branch paralel.
+
 ```bash
-# Contoh Python
+# Contoh Python (port bebas)
 python -m http.server 8080
 ```
 
-Buka `http://localhost:8080`.
+Buka `http://localhost:8080` jika memakai contoh di atas.
 
 ## Deploy
 
