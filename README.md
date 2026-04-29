@@ -25,12 +25,31 @@ Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Li
 
 Butuh server HTTP statis (bukan `file://`) agar Service Worker dan fitur yang memanggil API eksternal berfungsi.
 
+### Dua versi preview (Raw vs monetization experiment)
+
+| Versi | Branch Git | Cara jalan | Preview |
+|--------|------------|------------|---------|
+| **Raw** (stabil, tanpa monetisasi di `main`) | `main` | [`serve.bat`](serve.bat) atau [`server.ps1`](server.ps1) (port default **61036**) | [http://localhost:61036/](http://localhost:61036/) |
+| **Monetized (eksperimental)** | `experiment/monetization` | [`serve-experiment.bat`](serve-experiment.bat) — memakai `PORT=61037` + [`server.ps1`](server.ps1) | [http://localhost:61037/](http://localhost:61037/) |
+
+**Jalankan dua preview sekaligus:** clone atau worktree kedua, lalu di folder worktree checkout branch yang sesuai dan jalankan skrip di atas (port berbeda).
+
+```powershell
+# Contoh worktree (dari root repo ini):
+git fetch origin
+git worktree add ..\properti-ku-monetization experiment/monetization
+# Lalu di folder ..\properti-ku-monetization jalankan serve-experiment.bat
+# Di folder ini (main) jalankan serve.bat — 61036 vs 61037
+```
+
+**Windows (ringkas):** `serve.bat` = raw **61036**; setelah checkout `experiment/monetization`, `serve-experiment.bat` = **61037**.
+
 ```bash
-# Contoh Python
+# Alternatif (Python)
 python -m http.server 8080
 ```
 
-Buka `http://localhost:8080`.
+Buka [http://localhost:8080/](http://localhost:8080/) jika memakai contoh di atas.
 
 ## Deploy
 

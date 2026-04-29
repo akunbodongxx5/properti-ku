@@ -572,6 +572,85 @@ function savePayments(p) { DB.set('payments', p); }
 function getProperties() { return DB.get('properties'); }
 function saveProperties(p) { DB.set('properties', p); }
 
+// ===== Billing / monetisasi (bukan «Pro» = mode UI laporan — itu isProMode()) =====
+/** Maks unit untuk paket Free. Di atas ini butuh Pro (kecuali sudah grandfather / kode promo). */
+const BILLING_FREE_MAX_UNITS = 5;
+
+function getBillingPlan() {
+  return DB.getVal('billing_plan') === 'pro' ? 'pro' : 'free';
+}
+function isBillingPro() {
+  return getBillingPlan() === 'pro';
+}
+/** Satu kali: data lama dengan banyak unit tetap Pro; pengguna baru ≤ batas = Free. */
+function migrateBillingPlanOnce() {
+  if (DB.getVal('billing_migrated')) return;
+  const n = getUnits().length;
+  DB.setVal('billing_plan', n > BILLING_FREE_MAX_UNITS ? 'pro' : 'free');
+  DB.setVal('billing_migrated', '1');
+}
+function setBillingPlanPro() {
+  DB.setVal('billing_plan', 'pro');
+  DB.setVal('billing_migrated', '1');
+}
+/** Kode promo dari hosting (array string). Localhost otomatis dapat kode dev. */
+function getBillingPromoCodes() {
+  const cfg = typeof window !== 'undefined' ? window.PROPERTIKU_CONFIG : null;
+  const fromCfg = cfg && Array.isArray(cfg.billingPromoCodes) ? cfg.billingPromoCodes.map(String) : [];
+  const host = typeof location !== 'undefined' ? String(location.hostname || '') : '';
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  if (isLocal) return fromCfg.concat('PK-LOCAL-PRO');
+  return fromCfg;
+}
+function applyBillingPromoCode(raw) {
+  const c = String(raw || '').trim();
+  if (!c) return false;
+  const ok = getBillingPromoCodes().some(x => String(x).trim() === c);
+  if (ok) {
+    setBillingPlanPro();
+    return true;
+  }
+  return false;
+}
+/** Boleh menambah `addCount` unit baru (bukan edit). */
+function billingAllowsAddingUnits(addCount) {
+  const add = Math.max(0, Number(addCount) || 0);
+  if (isBillingPro()) return true;
+  return getUnits().length + add <= BILLING_FREE_MAX_UNITS;
+}
+function requireBillingProForExport() {
+  if (isBillingPro()) return true;
+  if (typeof showToast === 'function') showToast(t('billing.exportProOnly'), 'info', 5000);
+  else alert(t('billing.exportProOnly'));
+  showBillingUpgrade();
+  return false;
+}
+function showBillingUpgrade() {
+  closeModal();
+  openModal(t('billing.upgradeTitle'), `
+    <p style="font-size:13px;color:var(--text-secondary);line-height:1.55">${t('billing.upgradeBody')}</p>
+    <ul style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin:12px 0 14px 18px;padding:0">
+      <li>${t('billing.perkUnits', { max: BILLING_FREE_MAX_UNITS })}</li>
+      <li>${t('billing.perkExport')}</li>
+    </ul>
+    <div class="form-group"><label class="form-label">${t('billing.codeLabel')}</label>
+      <input class="form-input" id="billing-code-input" autocomplete="off" placeholder="${escapeHtml(t('billing.codePh'))}">
+    </div>
+    <button type="button" class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="submitBillingCode()">${t('billing.activate')}</button>
+    <small style="color:var(--text-muted);display:block;line-height:1.45">${t('billing.codeHint')}</small>
+  `);
+}
+function submitBillingCode() {
+  const raw = document.getElementById('billing-code-input') && document.getElementById('billing-code-input').value;
+  if (applyBillingPromoCode(raw)) {
+    closeModal();
+    if (typeof showToast === 'function') showToast(t('billing.activated'), 'success', 3200);
+    refreshCurrentPage();
+  } else {
+    alert(t('billing.codeInvalid'));
+  }
+}
+
 function getOrCreateProperty(name) {
   const props = getProperties();
   let prop = props.find(p => p.name === name);
@@ -580,7 +659,7 @@ function getOrCreateProperty(name) {
       id: DB.genId(), name,
       acquisitionMode: 'property',
       purchasePrice: 0, acquisitionCost: 0, renovationCost: 0, legalCost: 0,
-      sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0,
+      sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0, sharedCostsEnabled: false,
       pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0, notes: '', createdAt: new Date().toISOString()
     };
     props.push(prop);
@@ -650,8 +729,21 @@ function getUnitMonthlyMortgage(unit) {
   return +(getUnitAcquisition(unit).monthlyMortgage || 0);
 }
 
-function getPropertySharedAcquisitionTotal(prop) {
+function getPropertySharedCostRawTotal(prop) {
+  if (!prop) return 0;
   return (prop.sharedSetupCost || 0) + (prop.sharedRenovationCost || 0) + (prop.sharedLegalCost || 0);
+}
+
+/** Sertakan biaya investasi bersama (di luar harga per unit) dalam total. */
+function isSharedPropertyCostsEnabled(prop) {
+  if (!prop) return false;
+  if (typeof prop.sharedCostsEnabled === 'boolean') return prop.sharedCostsEnabled;
+  return getPropertySharedCostRawTotal(prop) > 0;
+}
+
+function getPropertySharedAcquisitionTotal(prop) {
+  if (!isSharedPropertyCostsEnabled(prop)) return 0;
+  return getPropertySharedCostRawTotal(prop);
 }
 
 /** Total modal untuk yield/ROI (IDR). */
@@ -696,6 +788,13 @@ function togglePropertyAcquisitionBlocks(mode) {
   const s = document.getElementById('prop-acq-shared');
   if (b) b.style.display = m === 'property' ? 'block' : 'none';
   if (s) s.style.display = m === 'unit' ? 'block' : 'none';
+  if (m === 'unit') syncSharedPropertyCostsFormVisibility();
+}
+
+function syncSharedPropertyCostsFormVisibility() {
+  const cb = document.getElementById('shared-costs-toggle');
+  const body = document.getElementById('prop-shared-costs-body');
+  if (cb && body) body.style.display = cb.checked ? 'block' : 'none';
 }
 
 function syncUnitAcquisitionSection() {
@@ -1256,6 +1355,12 @@ function saveUnit(e, editId) {
 
   // Auto-create property record if new
   getOrCreateProperty(property);
+
+  if (!editId && !billingAllowsAddingUnits(1)) {
+    if (typeof showToast === 'function') showToast(t('billing.unitLimit', { max: BILLING_FREE_MAX_UNITS }), 'warning', 5000);
+    showBillingUpgrade();
+    return;
+  }
 
   const newFacilities = _selectedFacilities.join(',');
   const newPrice = parseNum(f.price.value);
@@ -2242,6 +2347,17 @@ function changeReportPeriod(p, btn) {
   renderReports();
 }
 
+/** Dari laporan yield: ke Unit, filter pencarian nama properti, buka grup properti. */
+function goToUnitsForYieldProperty(propName) {
+  const navBtn = document.querySelector('.bottom-nav button[onclick*="units"]');
+  if (navBtn) navigateTo('units', navBtn);
+  else navigateTo('units');
+  const searchEl = document.getElementById('search-unit');
+  if (searchEl) searchEl.value = propName || '';
+  if (propName) _collapsedProps[propName] = false;
+  renderUnits();
+}
+
 function renderReports() {
   if (isSimpleMode()) {
     reportTab = 'overview';
@@ -2378,6 +2494,7 @@ function expenseCategoryPlain(id) {
  * CSV untuk pajak / akuntansi: kolom Amount_IDR angka bulat (mudah SUM di Excel), grup per bagian.
  */
 function exportOverviewReportCsv() {
+  if (!requireBillingProForExport()) return;
   const ctx = buildOverviewExportContext();
   const rows = [];
   const slug = ctx.reportPeriod === 'month' ? ctx.cp : `year-${ctx.cp}`;
@@ -2542,6 +2659,7 @@ function buildTaxReportPrintHtml(ctx) {
 
 /** PDF ringan: buka jendela siap cetak → simpan sebagai PDF dari dialog browser. */
 function exportOverviewReportPdf() {
+  if (!requireBillingProForExport()) return;
   const ctx = buildOverviewExportContext();
   const html = buildTaxReportPrintHtml(ctx);
   const w = window.open('', '_blank');
@@ -2686,6 +2804,40 @@ function renderYield() {
       compHtml += `<tr onclick="showPropertySettings(${onclickStrArg(prop)})"><td style="font-weight:700">${escapeHtml(prop)}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td>${paybackLabel}</td></tr>`;
     }
 
+    const sharedAcq = getPropertySharedAcquisitionTotal(pd);
+    const sumUnitAcq = pu.reduce((s, u) => s + getUnitAcquisitionTotal(u), 0);
+    const allUnitCapZero = pu.length > 0 && pu.every(u => getUnitAcquisitionTotal(u) === 0);
+    const legacyPurchaseUnused = acqMode === 'unit' && (pd.purchasePrice || 0) > 0 && sumUnitAcq === 0 && sharedAcq === 0;
+
+    let investContextBanner = '';
+    if (acqMode === 'property') {
+      investContextBanner = `<div class="yield-invest-banner yield-invest-banner--muted" role="note"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldPropertyModeHint'))}</p></div>`;
+    } else if (acqMode === 'unit' && pu.length) {
+      const cta = `<div class="yield-invest-banner-actions">
+        <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px" onclick="event.stopPropagation();showPropertySettings(${onclickStrArg(prop)})">${escapeHtml(t('rpt.configureInvest'))}</button>
+        <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px" onclick="event.stopPropagation();goToUnitsForYieldProperty(${onclickStrArg(prop)})">${escapeHtml(t('rpt.goToUnitList'))}</button>
+      </div>`;
+      if (legacyPurchaseUnused) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--warn" role="alert"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldPropertyPurchaseUnused'))}</p>${cta}</div>`;
+      } else if (allUnitCapZero && sharedAcq > 0) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--info" role="status"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldSharedExplainsTotal', { amt: formatRpFull(sharedAcq) }))}</p>${cta}</div>`;
+      } else if (allUnitCapZero && acquisitionTotal <= 0) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--info" role="status"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldNoUnitCapitalYet'))}</p>${cta}</div>`;
+      }
+    }
+
+    const unitBreakdownHtml = acqMode === 'unit' && pu.length
+      ? (() => {
+          const rows = pu.map(ux => `<tr><td>${escapeHtml(ux.name)}</td><td>${formatRp(getUnitAcquisitionTotal(ux))}</td><td>${getUnitMonthlyMortgage(ux) > 0 ? formatRp(getUnitMonthlyMortgage(ux)) : '—'}</td></tr>`).join('');
+          const sharedRow = sharedAcq > 0
+            ? `<tr class="yield-shared-row"><td><em>${escapeHtml(t('rpt.sharedCapitalRow'))}</em></td><td style="font-weight:600">${formatRp(sharedAcq)}</td><td>—</td></tr>`
+            : '';
+          const tbodyOrder = (sharedAcq > 0 && allUnitCapZero) ? (sharedRow + rows) : (rows + sharedRow);
+          const foot = `<p class="yield-cap-micro" style="margin:6px 0 0 0;line-height:1.45">${escapeHtml(t('rpt.yieldUnitTableFootnote'))}</p>`;
+          return `<div class="yield-compare-table" style="margin:6px 0 10px 0"><table class="compare-table" style="font-size:12px"><thead><tr><th>${t('rpt.colUnit')}</th><th>${t('rpt.unitCapitalShort')}</th><th>${t('rpt.unitMortgageMo')}</th></tr></thead><tbody>${tbodyOrder}</tbody></table></div>${foot}`;
+        })()
+      : '';
+
     return `<div class="yield-card">
       <div class="yield-card-header">
         <span class="yield-card-name">${escapeHtml(prop)}</span>
@@ -2693,7 +2845,8 @@ function renderYield() {
       </div>
       <div class="yield-section-title">${t('rpt.investmentSection')}</div>
       <div class="yield-row"><span>${acqMode === 'unit' ? t('rpt.totalCapital') : t('rpt.purchasePrice')}</span><span style="font-weight:700">${acquisitionTotal>0?formatRpFull(acquisitionTotal):'<span style="color:var(--warning-dark)">' + escapeHtml(t('rpt.notFilledShort')) + '</span>'}</span></div>
-      ${acqMode === 'unit' && pu.length ? `<div class="yield-compare-table" style="margin:6px 0 10px 0"><table class="compare-table" style="font-size:12px"><thead><tr><th>${t('rpt.colUnit')}</th><th>${t('rpt.unitCapitalShort')}</th><th>${t('rpt.unitMortgageMo')}</th></tr></thead><tbody>` + pu.map(ux => `<tr><td>${escapeHtml(ux.name)}</td><td>${formatRp(getUnitAcquisitionTotal(ux))}</td><td>${getUnitMonthlyMortgage(ux) > 0 ? formatRp(getUnitMonthlyMortgage(ux)) : '—'}</td></tr>`).join('') + `</tbody></table></div>` : ''}
+      ${investContextBanner}
+      ${unitBreakdownHtml}
       <div class="yield-section-title">${t('rpt.incomeSection')}</div>
       <div class="yield-row"><span>${t('rpt.actualRentMo', { n: occCount })}</span><span style="color:var(--success)">${formatRp(monthlyRent)}</span></div>
       <div class="yield-row"><span>${t('rpt.potentialRentMo', { n: pu.length })}</span><span>${formatRp(potentialRent)}</span></div>
@@ -3626,6 +3779,7 @@ function showPropertySettings(propName) {
   }
 
   const acqMode = getPropertyAcquisitionMode(pd);
+  const sharedToggleOn = isSharedPropertyCostsEnabled(pd);
 
   openModal(t('prop.settingsTitle', { name: propName }), `
     <form onsubmit="savePropertySettings(event, ${onclickStrArg(propName)})">
@@ -3667,14 +3821,23 @@ function showPropertySettings(propName) {
           <small style="color:var(--text-muted);font-size:12px">${t('form.tenorHint')}</small></div>
       </div>
       <div id="prop-acq-shared" style="display:${acqMode === 'unit' ? 'block' : 'none'}">
-        <div class="form-group"><label class="form-label">${t('form.sharedSetupCost')}</label>
-          <input class="form-input" name="sharedSetupCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedSetupCost ? formatNumDots(pd.sharedSetupCost) : ''}">
-          <small style="color:var(--text-muted);font-size:12px">${t('form.sharedSetupHint')}</small></div>
-        <div class="form-group"><label class="form-label">${t('form.sharedRenoCost')}</label>
-          <input class="form-input" name="sharedRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedRenovationCost ? formatNumDots(pd.sharedRenovationCost) : ''}"></div>
-        <div class="form-group"><label class="form-label">${t('form.sharedLegalCost')}</label>
-          <input class="form-input" name="sharedLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedLegalCost ? formatNumDots(pd.sharedLegalCost) : ''}"></div>
-        <small style="color:var(--text-muted);font-size:12px;display:block;margin-bottom:12px">${t('form.sharedCostsFooter')}</small>
+        <div class="form-group" style="margin-bottom:8px">
+          <label for="shared-costs-toggle" class="form-label" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600;line-height:1.35">
+            <input type="checkbox" name="sharedCostsEnabled" id="shared-costs-toggle" style="width:20px;height:20px;flex-shrink:0;margin-top:2px" ${sharedToggleOn ? 'checked' : ''} onchange="syncSharedPropertyCostsFormVisibility()">
+            <span>${t('form.sharedCostsToggle')}</span>
+          </label>
+          <small style="color:var(--text-muted);font-size:12px;display:block;margin:6px 0 0 30px">${t('form.sharedCostsToggleHint')}</small>
+        </div>
+        <div id="prop-shared-costs-body" style="display:${sharedToggleOn ? 'block' : 'none'}">
+          <div class="form-group"><label class="form-label">${t('form.sharedSetupCost')}</label>
+            <input class="form-input" name="sharedSetupCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedSetupCost ? formatNumDots(pd.sharedSetupCost) : ''}">
+            <small style="color:var(--text-muted);font-size:12px">${t('form.sharedSetupHint')}</small></div>
+          <div class="form-group"><label class="form-label">${t('form.sharedRenoCost')}</label>
+            <input class="form-input" name="sharedRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedRenovationCost ? formatNumDots(pd.sharedRenovationCost) : ''}"></div>
+          <div class="form-group"><label class="form-label">${t('form.sharedLegalCost')}</label>
+            <input class="form-input" name="sharedLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedLegalCost ? formatNumDots(pd.sharedLegalCost) : ''}"></div>
+          <small style="color:var(--text-muted);font-size:12px;display:block;margin-bottom:12px">${t('form.sharedCostsFooter')}</small>
+        </div>
       </div>
       <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">${t('form.pbbYr')}</label>
@@ -3764,6 +3927,8 @@ function savePropertySettings(e, oldPropName) {
   prop.acquisitionCost = parseNum(f.acquisitionCost?.value) || 0;
   prop.renovationCost = parseNum(f.renovationCost?.value) || 0;
   prop.legalCost = parseNum(f.legalCost?.value) || 0;
+  const scCb = f.querySelector && f.querySelector('#shared-costs-toggle');
+  prop.sharedCostsEnabled = !!(scCb && scCb.checked);
   prop.sharedSetupCost = parseNum(f.sharedSetupCost?.value) || 0;
   prop.sharedRenovationCost = parseNum(f.sharedRenovationCost?.value) || 0;
   prop.sharedLegalCost = parseNum(f.sharedLegalCost?.value) || 0;
@@ -3974,6 +4139,19 @@ function saveBulkUnits(e, propName) {
   const type = units.find(u => u.property === propName)?.type || 'kos';
   const existingNames = new Set(units.filter(u => u.property === propName).map(u => u.name));
 
+  let wouldAdd = 0;
+  for (let i = start; i <= end; i++) {
+    if (skipNums.includes(i)) continue;
+    const name = prefix ? `${prefix} ${i}` : `${i}`;
+    if (existingNames.has(name)) continue;
+    wouldAdd++;
+  }
+  if (!billingAllowsAddingUnits(wouldAdd)) {
+    if (typeof showToast === 'function') showToast(t('billing.bulkNeedPro', { max: BILLING_FREE_MAX_UNITS }), 'warning', 5500);
+    showBillingUpgrade();
+    return;
+  }
+
   // Get template facilities if subtype exists
   const tpl = subtype ? getSubtypeTemplate(propName, subtype) : null;
   const facilities = tpl?.facilities || '';
@@ -4092,6 +4270,17 @@ function showSettings() {
       <input type="text" id="settings-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}" value="${escapeHtml(getOwnerDisplayName())}">
       <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.ownerHelp')}</small>
       <button type="button" class="btn btn-primary" style="width:100%;margin-top:12px" onclick="saveOwnerProfileFromSettings()">${t('settings.saveGreet')}</button>
+    </div>
+
+    <div class="yield-divider" style="margin:16px 0"></div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">${t('billing.sectionTitle')}</label>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:10px">
+        ${isBillingPro()
+    ? escapeHtml(t('billing.statusPro'))
+    : escapeHtml(t('billing.statusFree', { used: getUnits().length, max: BILLING_FREE_MAX_UNITS }))}
+      </div>
+      <button type="button" class="btn btn-outline" style="width:100%" onclick="showBillingUpgrade()">${isBillingPro() ? t('billing.openPromo') : t('billing.upgradeCta')}</button>
     </div>
 
     <div class="form-group" style="margin-bottom:20px">
@@ -5424,6 +5613,7 @@ function explanationToggleBtn() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initLocale === 'function') initLocale();
+  migrateBillingPlanOnce();
   applyUiMode();
   syncPageTitle();
   applyExplanationPref();
