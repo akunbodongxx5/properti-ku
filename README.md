@@ -60,9 +60,16 @@ Workflow Actions mendorong branch **`gh-pages`**: `main` ke **root**, `experimen
 | Stabil (setelah workflow `main` jalan) | `https://akunbodongxx5.github.io/properti-ku/` |
 | Eksperimen / monetization | `https://akunbodongxx5.github.io/properti-ku/experiment/` |
 
-**Setup sekali di GitHub:** **Settings → Pages → Build and deployment → Source:** pilih branch **`gh-pages`**, folder **`/ (root)`**. Di **Settings → Actions → General → Workflow permissions**, aktifkan **Read and write** agar `GITHUB_TOKEN` bisa push ke `gh-pages`.
+**Setup sekali di GitHub**
 
-Urutan aman: merge workflow ini ke `main`, push `main` (deploy root), lalu push `experiment/monetization` (isi `/experiment/`). Jika Pages sebelumnya dari branch `main` langsung, ubah ke `gh-pages` seperti di atas.
+1. **Settings → Actions → General → Workflow permissions** → **Read and write** (agar workflow bisa push ke `gh-pages`).
+2. **Settings → Pages → Build and deployment → Source:** pilih branch **`gh-pages`**, folder **`/ (root)`** — **bukan** branch `main`.  
+   Selama Pages masih dari **`main`**, URL **`/experiment/` akan 404** walaupun folder itu sudah ada di branch `gh-pages` (GitHub hanya melayani satu sumber).
+
+**Urutan deploy**
+
+- Workflow **experiment** mengisi `gh-pages/experiment/` (sudah jalan saat push ke `experiment/monetization`).
+- Workflow **main** mengisi **root** `gh-pages/` (butuh file workflow di branch `main` + push `main`, atau *Run workflow* manual setelah merge). Tanpa itu, setelah Anda pindahkan Pages ke `gh-pages`, URL root `/` bisa kosong/404 sampai **Pages — main** pernah sukses sekali.
 
 ## Deploy
 
