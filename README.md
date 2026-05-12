@@ -1,0 +1,109 @@
+# LandlordKu
+
+Aplikasi web (PWA) untuk mengelola properti sewaan: unit, penyewa, pembayaran, dan laporan.
+
+## Tablet & iPad
+
+Layout memakai lebar kolom adaptif (hingga ~960px di layar lebar), target sentuh ~48px, dan dashboard memasang **cashflow** dan **tagihan mendatang** berdampingan mulai lebar ≥768px. Modal form di layar ≥900px tampil sebagai kartu di tengah (bukan hanya sheet dari bawah).
+
+## Graphify (Cursor / AI — konteks codebase)
+
+Proyek ini bisa memakai [Graphify](https://github.com/safishamsi/graphify) agar asisten kode membaca `graphify-out/GRAPH_REPORT.md` dulu, bukan seluruh file mentah.
+
+```bash
+pip install graphifyy
+python -m graphify cursor install
+python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+# Windows: powershell -File scripts/rebuild-graph.ps1
+```
+
+**Setiap update kode yang berarti:** jalankan rebuild graph di atas **di mesin lokal** agar `graphify-out/` tetap segar untuk Cursor/Graphify. Folder itu **tidak di-commit** (hanya untuk konteks lokal). Hook `graphify hook install` tidak disarankan: rebuild pasca-commit bisa memicu diff graph berulang — pakai rebuild manual + skrip.
+
+Aturan Cursor ada di `.cursor/rules/graphify.mdc` (setelah `cursor install`). Lihat juga `AGENTS.md`.
+
+## Menjalankan lokal
+
+Butuh server HTTP statis (bukan `file://`) agar Service Worker dan fitur yang memanggil API eksternal berfungsi.
+
+### Dua jalur preview (Raw vs monetization experiment)
+
+| Versi | Branch | Server lokal | Preview |
+|--------|--------|----------------|---------|
+| **Raw / stabil** | `main` | [`serve.bat`](serve.bat) atau [`server.ps1`](server.ps1) — port default **61036** | [http://localhost:61036/](http://localhost:61036/) |
+| **Monetized (eksperimental)** | `experiment/monetization` | Di checkout branch itu: [`serve-experiment.bat`](serve-experiment.bat) (`PORT=61037`) + [`server.ps1`](server.ps1) | [http://localhost:61037/](http://localhost:61037/) |
+
+**Dua server sekaligus:** [git worktree](https://git-scm.com/docs/git-worktree) — dua folder & dua branch. Rinci: [`docs/experiments/monetization-branch.md`](docs/experiments/monetization-branch.md).
+
+```powershell
+git fetch origin
+git worktree add ..\properti-ku-monetization experiment/monetization
+# Folder ini (main): serve.bat — worktree: serve-experiment.bat
+```
+
+**Fork / remote:** `git push -u origin experiment/monetization`, lalu buat PR jika perlu.
+
+```bash
+# Alternatif (Python)
+python -m http.server 8080
+```
+
+Buka [http://localhost:8080/](http://localhost:8080/) jika memakai contoh di atas.
+
+### GitHub Pages (dua URL)
+
+Workflow Actions mendorong branch **`gh-pages`**: `main` ke **root**, `experiment/monetization` ke subfolder **`/experiment/`** (tanpa menimpa stabil).
+
+| Lingkungan | URL (ganti `akunbodongxx5` jika beda) |
+|------------|----------------------------------------|
+| Stabil (setelah workflow `main` jalan) | `https://akunbodongxx5.github.io/properti-ku/` |
+| Eksperimen / monetization | `https://akunbodongxx5.github.io/properti-ku/experiment/` |
+
+**Setup sekali di GitHub**
+
+1. **Settings → Actions → General → Workflow permissions** → **Read and write** (agar workflow bisa push ke `gh-pages`).
+2. **Settings → Pages → Build and deployment → Source:** pilih branch **`gh-pages`**, folder **`/ (root)`** — **bukan** branch `main`.  
+   Selama Pages masih dari **`main`**, URL **`/experiment/` akan 404** walaupun folder itu sudah ada di branch `gh-pages` (GitHub hanya melayani satu sumber).
+
+**Urutan deploy**
+
+- Workflow **experiment** mengisi `gh-pages/experiment/` (saat push ke `experiment/monetization`).
+- Workflow **main** mengisi **root** `gh-pages/` (saat push ke `main`). Tanpa itu, setelah Pages pindah ke `gh-pages`, root `/` bisa 404 sampai workflow **Pages — main** pernah sukses sekali.
+
+## Deploy
+
+1. Unggah isi repo ke hosting statis (GitHub Pages, Netlify, VPS + nginx, dll.).
+2. **Setelah mengubah** `app.js`, `i18n.js`, atau `styles.css`, naikkan versi cache:
+   - Di [`index.html`](index.html): query string `?v=` pada skrip dan stylesheet (mis. `?v=28`).
+   - Di [`sw.js`](sw.js): `CACHE_NAME` (mis. `landlordKu-v66`) dan string `?v=` di array `ASSETS`.
+3. Pengguna yang sudah pernah membuka app mungkin perlu **hard refresh** atau menutup tab agar bundle baru terpakai.
+
+## Kebijakan privasi
+
+Halaman statis: [`privacy.html`](privacy.html). Tautan dari **Pengaturan** di dalam app.
+
+## Analytics & error monitoring (opsional)
+
+Di [`index.html`](index.html), objek `window.LANDLORDKU_CONFIG` dapat diisi (alias `window.PROPERTIKU_CONFIG` tetap didukung):
+
+```html
+<script>
+window.LANDLORDKU_CONFIG = {
+  ga4MeasurementId: '',  // mis. G-XXXXXXXX
+  sentryDsn: '',         // dari Sentry SDK
+  environment: 'production'
+};
+window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
+</script>
+```
+
+[`analytics.js`](analytics.js) dimuat setelah konfigurasi; jika kedua ID kosong, tidak ada request ke penyedia pihak ketiga.
+
+## Dokumentasi rilis
+
+- [Salinan store & landing](docs/launch/store-copy.md)
+- [QA matrix](docs/launch/qa-matrix.md)
+- [Metrik minggu 1](docs/launch/metrics-week1.md)
+
+## Lisensi
+
+Sesuai repositori pemilik proyek.
