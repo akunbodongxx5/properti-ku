@@ -51,6 +51,19 @@ python -m http.server 8080
 
 Buka [http://localhost:8080/](http://localhost:8080/) jika memakai contoh di atas.
 
+### GitHub Pages (dua URL)
+
+Workflow Actions mendorong branch **`gh-pages`**: `main` ke **root**, `experiment/monetization` ke subfolder **`/experiment/`** (tanpa menimpa stabil).
+
+| Lingkungan | URL (ganti `akunbodongxx5` jika beda) |
+|------------|----------------------------------------|
+| Stabil (setelah workflow `main` jalan) | `https://akunbodongxx5.github.io/properti-ku/` |
+| Eksperimen / monetization | `https://akunbodongxx5.github.io/properti-ku/experiment/` |
+
+**Setup sekali di GitHub:** **Settings → Pages → Build and deployment → Source:** pilih branch **`gh-pages`**, folder **`/ (root)`**. Di **Settings → Actions → General → Workflow permissions**, aktifkan **Read and write** agar `GITHUB_TOKEN` bisa push ke `gh-pages`.
+
+Urutan aman: merge workflow ini ke `main`, push `main` (deploy root), lalu push `experiment/monetization` (isi `/experiment/`). Jika Pages sebelumnya dari branch `main` langsung, ubah ke `gh-pages` seperti di atas.
+
 ## Deploy
 
 1. Unggah isi repo ke hosting statis (GitHub Pages, Netlify, VPS + nginx, dll.).

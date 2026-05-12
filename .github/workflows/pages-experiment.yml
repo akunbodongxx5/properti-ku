@@ -1,0 +1,29 @@
+# Deploy experiment branch to https://<user>.github.io/<repo>/experiment/
+name: Pages — experiment branch
+
+on:
+  push:
+    branches: [experiment/monetization]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-experiment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to gh-pages /experiment
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          destination_dir: experiment
+          keep_files: true
+          exclude_assets: .github,android,node_modules
