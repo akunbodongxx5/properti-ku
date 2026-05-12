@@ -1,8 +1,8 @@
 @echo off
-title PropertiKu — dev server
+title LandlordKu — dev server
 cd /d "%~dp0"
 echo.
-echo PropertiKu: menjalankan server lokal...
+echo LandlordKu: menjalankan server lokal...
 echo Jangan tutup jendela ini selama pakai app di browser.
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0server.ps1"

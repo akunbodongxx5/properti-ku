@@ -1,16 +1,16 @@
-PropertiKu — Version 1.0 Release Notes (English)
+LandlordKu — Version 1.0 Release Notes (English)
 ================================================
 
 --- SHORT (Play Store / "What's new") ---
 
-PropertiKu 1.0 — first release.
+LandlordKu 1.0 — first release.
 
 Manage rental properties in one app: units & tenants, leases, bills & expenses, due reminders, cash flow, and reports (yield, projection, occupancy, mortgage calculator, charts). Simple or Pro mode. Indonesian & English. Backup your data (export/import). Light & dark theme. PWA — add to home screen. Data is stored on your device (local). Ideal for boarding houses, shophouses, and other rental portfolios.
 
 
 --- ONE-LINER "What's new" ---
 
-First release of PropertiKu — manage rentals, bills, reports & mortgage tools in one app; your data stays on your device.
+First release of LandlordKu — manage rentals, bills, reports & mortgage tools in one app; your data stays on your device.
 
 
 --- SHORT DESCRIPTION (optional ~80 chars) ---

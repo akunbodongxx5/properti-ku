@@ -1,4 +1,4 @@
-# PropertiKu — Store & landing copy
+# LandlordKu — Store & landing copy
 
 Gunakan teks di bawah untuk Play Console / App Store / landing. Sesuaikan batas karakter terbaru per platform.
 
@@ -6,7 +6,7 @@ Gunakan teks di bawah untuk Play Console / App Store / landing. Sesuaikan batas 
 
 | Field | Indonesia | English |
 |-------|-----------|---------|
-| Nama app | PropertiKu | PropertiKu |
+| Nama app | LandlordKu | LandlordKu |
 | Subtitle (≤80 char) | Sewa, unit & cashflow dalam satu app | Rent, units & cashflow in one app |
 
 ## Deskripsi singkat (≈80 karakter)
@@ -19,7 +19,7 @@ Gunakan teks di bawah untuk Play Console / App Store / landing. Sesuaikan batas 
 
 ### Indonesia
 
-PropertiKu membantu pemilik dan pengelola properti sewaan mengatur unit, penyewa, dan pembayaran dalam satu aplikasi web yang ringan.
+LandlordKu membantu pemilik dan pengelola properti sewaan mengatur unit, penyewa, dan pembayaran dalam satu aplikasi web yang ringan.
 
 - Dashboard: ringkasan cashflow, tagihan mendatang, dan pengingat operasional
 - Unit & penyewa: status terisi/kosong, kontrak, dan riwayat
@@ -32,7 +32,7 @@ Tidak memerlukan kartu kredit untuk memulai. Untuk pengingat Telegram, hubungkan
 
 ### English
 
-PropertiKu helps landlords and small operators manage units, tenants, and payments in one lightweight web app.
+LandlordKu helps landlords and small operators manage units, tenants, and payments in one lightweight web app.
 
 - Dashboard: cashflow summary, upcoming bills, and operational reminders
 - Units & tenants: occupancy, leases, and history

@@ -1,4 +1,5 @@
-// ===== PropertiKu — Property Rental Management App =====
+// ===== LandlordKu — Property Rental Management App =====
+// Data lokal memakai prefix localStorage legacy `propertiKu_*` agar backup & data pengguna tetap kompatibel.
 
 // ===== Data Layer =====
 function notifyStorageQuotaMaybe(err) {
@@ -72,7 +73,7 @@ function applyUiMode() {
   const navLbl = document.getElementById('nav-reports-label');
   if (navLbl && typeof t === 'function') navLbl.textContent = getUiMode() === 'simple' ? t('nav.summary') : t('nav.reports');
 }
-function setUiModeFromSettings(mode) {
+function setUiMode(mode) {
   if (mode !== 'simple' && mode !== 'pro') return;
   DB.setVal('ui_mode', mode);
   applyUiMode();
@@ -90,6 +91,15 @@ function setUiModeFromSettings(mode) {
   };
   const pt = document.getElementById('page-title');
   if (pt && titleMap[currentPage]) pt.textContent = titleMap[currentPage];
+  if (typeof showToast === 'function') {
+    showToast(mode === 'simple' ? t('mode.toastSimple') : t('mode.toastPro'), 'info', 1800);
+  }
+}
+function setUiModeFromDashboard(mode) {
+  setUiMode(mode);
+}
+function setUiModeFromSettings(mode) {
+  setUiMode(mode);
   closeModal();
   showSettings();
 }
@@ -562,6 +572,64 @@ function openModal(title, html) {
 }
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
+// ===== Context help bottom sheet =====
+function helpButton(topic, label) {
+  return `<button type="button" class="help-dot" onclick="event.stopPropagation();openHelpSheet(${onclickStrArg(topic)})" aria-label="${escapeHtml(label || t('help.open'))}">?</button>`;
+}
+function getHelpCopy(topic) {
+  const isEn = typeof getLocale === 'function' && getLocale() === 'en';
+  const copy = {
+    modes: {
+      title: isEn ? 'Simple vs Pro View' : 'Tampilan Simpel vs Pro',
+      body: isEn
+        ? 'Simple hides advanced analysis so the app feels lighter. Pro View shows deeper tools like yield, charts, ROI, and bulk workflows. Your paid plan is separate: Free users can still preview Pro View, but paid features stay limited.'
+        : 'Simpel menyembunyikan analisis lanjutan supaya aplikasi terasa ringan. Pro menampilkan alat lengkap seperti yield, grafik, ROI, dan tambah massal. Paket bayar tetap terpisah: pengguna Free boleh melihat mode Pro, tapi fitur berbayar tetap dibatasi.'
+    },
+    billing: {
+      title: isEn ? 'Free and Pro Plan' : 'Paket Free dan Pro',
+      body: isEn
+        ? `Free is capped at ${BILLING_FREE_MAX_UNITS} units. Pro unlocks more units and report exports. QRIS can be connected later through a backend payment webhook.`
+        : `Free dibatasi ${BILLING_FREE_MAX_UNITS} unit. Pro membuka unit tambahan dan export laporan. QRIS nanti bisa disambungkan lewat backend + webhook pembayaran.`
+    },
+    calendar: {
+      title: isEn ? 'Business Calendar' : 'Kalender Bisnis',
+      body: isEn
+        ? 'This card gathers upcoming lease ends, tax dates, permits, and maintenance signals so you do not need to hunt across pages.'
+        : 'Kartu ini mengumpulkan kontrak mau habis, tanggal PBB, izin, dan sinyal perbaikan supaya kamu tidak perlu mencari ke banyak halaman.'
+    },
+    reminders: {
+      title: isEn ? 'Reminders' : 'Pengingat',
+      body: isEn
+        ? 'Use calendar export for simple reminders, WhatsApp for quick sharing, or Telegram if you want automatic chat reminders.'
+        : 'Pakai export kalender untuk pengingat sederhana, WhatsApp untuk kirim cepat, atau Telegram kalau ingin reminder otomatis ke chat.'
+    },
+    exports: {
+      title: isEn ? 'Report Export' : 'Export Laporan',
+      body: isEn
+        ? 'CSV/PDF exports are Pro plan features because they are meant for accounting, tax, and recurring reporting workflows.'
+        : 'Export CSV/PDF termasuk fitur paket Pro karena dipakai untuk akuntansi, pajak, dan laporan rutin.'
+    }
+  };
+  return copy[topic] || copy.modes;
+}
+function openHelpSheet(topic) {
+  const data = getHelpCopy(topic);
+  const overlay = document.getElementById('help-sheet-overlay');
+  const title = document.getElementById('help-sheet-title');
+  const body = document.getElementById('help-sheet-body');
+  if (!overlay || !title || !body) return;
+  title.textContent = data.title;
+  body.innerHTML = `<p>${escapeHtml(data.body)}</p><button type="button" class="btn btn-primary" onclick="closeHelpSheet()">${escapeHtml(t('help.gotIt'))}</button>`;
+  overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+function closeHelpSheet() {
+  const overlay = document.getElementById('help-sheet-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
 // ===== Data Accessors =====
 function getUnits() { return DB.get('units'); }
 function saveUnits(u) { DB.set('units', u); }
@@ -572,6 +640,90 @@ function savePayments(p) { DB.set('payments', p); }
 function getProperties() { return DB.get('properties'); }
 function saveProperties(p) { DB.set('properties', p); }
 
+// ===== Billing / monetisasi (bukan «Pro» = mode UI laporan — itu isProMode()) =====
+/** Maks unit untuk paket Free. Di atas ini butuh Pro (kecuali sudah grandfather / kode promo). */
+const BILLING_FREE_MAX_UNITS = 5;
+
+function getBillingPlan() {
+  return DB.getVal('billing_plan') === 'pro' ? 'pro' : 'free';
+}
+function isBillingPro() {
+  return getBillingPlan() === 'pro';
+}
+/** Satu kali: data lama dengan banyak unit tetap Pro; pengguna baru ≤ batas = Free. */
+function migrateBillingPlanOnce() {
+  if (DB.getVal('billing_migrated')) return;
+  const n = getUnits().length;
+  DB.setVal('billing_plan', n > BILLING_FREE_MAX_UNITS ? 'pro' : 'free');
+  DB.setVal('billing_migrated', '1');
+}
+function setBillingPlanPro() {
+  DB.setVal('billing_plan', 'pro');
+  DB.setVal('billing_migrated', '1');
+}
+/** Kode promo dari hosting (array string). Localhost otomatis dapat kode dev. */
+function getBillingPromoCodes() {
+  const cfg = typeof window !== 'undefined' ? (window.LANDLORDKU_CONFIG || window.PROPERTIKU_CONFIG) : null;
+  const fromCfg = cfg && Array.isArray(cfg.billingPromoCodes) ? cfg.billingPromoCodes.map(String) : [];
+  const host = typeof location !== 'undefined' ? String(location.hostname || '') : '';
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  if (isLocal) return fromCfg.concat('PK-LOCAL-PRO');
+  return fromCfg;
+}
+function applyBillingPromoCode(raw) {
+  const c = String(raw || '').trim();
+  if (!c) return false;
+  const ok = getBillingPromoCodes().some(x => String(x).trim() === c);
+  if (ok) {
+    setBillingPlanPro();
+    return true;
+  }
+  return false;
+}
+/** Boleh menambah `addCount` unit baru (bukan edit). */
+function billingAllowsAddingUnits(addCount) {
+  const add = Math.max(0, Number(addCount) || 0);
+  if (isBillingPro()) return true;
+  return getUnits().length + add <= BILLING_FREE_MAX_UNITS;
+}
+function requireBillingProForExport() {
+  if (isBillingPro()) return true;
+  if (typeof showToast === 'function') showToast(t('billing.exportProOnly'), 'info', 5000);
+  else alert(t('billing.exportProOnly'));
+  showBillingUpgrade();
+  return false;
+}
+function showBillingUpgrade() {
+  closeModal();
+  openModal(t('billing.upgradeTitle'), `
+    <div class="upgrade-hero">
+      <span class="upgrade-badge">${isBillingPro() ? t('billing.activeBadge') : t('billing.proBadge')}</span>
+      <h4>${isBillingPro() ? t('billing.proActiveTitle') : t('billing.proPitchTitle')}</h4>
+      <p>${t('billing.upgradeBody')}</p>
+    </div>
+    <div class="perk-list">
+      <div><strong>${t('billing.perkUnitsShort', { max: BILLING_FREE_MAX_UNITS })}</strong><span>${t('billing.perkUnitsDetail')}</span></div>
+      <div><strong>${t('billing.perkExportShort')}</strong><span>${t('billing.perkExportDetail')}</span></div>
+      <div><strong>${t('billing.perkQrisShort')}</strong><span>${t('billing.perkQrisDetail')}</span></div>
+    </div>
+    <div class="form-group"><label class="form-label">${t('billing.codeLabel')} ${helpButton('billing')}</label>
+      <input class="form-input" id="billing-code-input" autocomplete="off" placeholder="${escapeHtml(t('billing.codePh'))}">
+    </div>
+    <button type="button" class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="submitBillingCode()">${t('billing.activate')}</button>
+    <small class="microcopy">${t('billing.codeHint')}</small>
+  `);
+}
+function submitBillingCode() {
+  const raw = document.getElementById('billing-code-input') && document.getElementById('billing-code-input').value;
+  if (applyBillingPromoCode(raw)) {
+    closeModal();
+    if (typeof showToast === 'function') showToast(t('billing.activated'), 'success', 3200);
+    refreshCurrentPage();
+  } else {
+    alert(t('billing.codeInvalid'));
+  }
+}
+
 function getOrCreateProperty(name) {
   const props = getProperties();
   let prop = props.find(p => p.name === name);
@@ -580,7 +732,7 @@ function getOrCreateProperty(name) {
       id: DB.genId(), name,
       acquisitionMode: 'property',
       purchasePrice: 0, acquisitionCost: 0, renovationCost: 0, legalCost: 0,
-      sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0,
+      sharedSetupCost: 0, sharedRenovationCost: 0, sharedLegalCost: 0, sharedCostsEnabled: false,
       pbb: 0, maintenance: 0, insurance: 0, otherExpense: 0, cicilanPerBulan: 0, sisaTenor: 0, notes: '', createdAt: new Date().toISOString()
     };
     props.push(prop);
@@ -610,6 +762,49 @@ function getUnitMonthlyRent(unit) {
 
 function getUnitYearlyRent(unit) {
   return unit.billingCycle === 'yearly' ? (unit.price || 0) : (unit.price || 0) * 12;
+}
+
+function sumOccupiedMonthlyRent(unitList) {
+  return unitList.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+}
+
+function sumListedMonthlyRent(unitList) {
+  return unitList.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+}
+
+/** Pengeluaran tercatat (payments expense) untuk properti; `yearPrefix` = awalan `period` (mis. getYear()). */
+function sumRecordedExpenseForPropertyYear(payments, propertyName, yearPrefix) {
+  return payments
+    .filter(p => p.propertyName === propertyName && p.type === 'expense' && p.period.startsWith(yearPrefix))
+    .reduce((s, p) => s + p.amount, 0);
+}
+
+/** Total income status paid untuk properti (array `payments` boleh sudah difilter periode). */
+function sumPaidIncomeForProperty(payments, propertyName) {
+  return payments
+    .filter(p => p.propertyName === propertyName && p.type === 'income' && p.status === 'paid')
+    .reduce((s, p) => s + p.amount, 0);
+}
+
+/** Total amount pengeluaran (type expense) per properti. */
+function sumExpenseAmountForProperty(payments, propertyName) {
+  return payments
+    .filter(p => p.propertyName === propertyName && p.type === 'expense')
+    .reduce((s, p) => s + p.amount, 0);
+}
+
+/** Income paid di bulan kalender `cm` (format getMonthYear). */
+function sumPaidIncomeForPropertyMonth(payments, propertyName, cm) {
+  return payments
+    .filter(p => p.propertyName === propertyName && paymentMatchesCalendarMonth(p, cm) && p.type === 'income' && p.status === 'paid')
+    .reduce((s, p) => s + p.amount, 0);
+}
+
+/** Expense di bulan kalender `cm`. */
+function sumExpenseForPropertyMonth(payments, propertyName, cm) {
+  return payments
+    .filter(p => p.propertyName === propertyName && paymentMatchesCalendarMonth(p, cm) && p.type === 'expense')
+    .reduce((s, p) => s + p.amount, 0);
 }
 
 function getUnitMonthlyCost(unit) {
@@ -650,8 +845,21 @@ function getUnitMonthlyMortgage(unit) {
   return +(getUnitAcquisition(unit).monthlyMortgage || 0);
 }
 
-function getPropertySharedAcquisitionTotal(prop) {
+function getPropertySharedCostRawTotal(prop) {
+  if (!prop) return 0;
   return (prop.sharedSetupCost || 0) + (prop.sharedRenovationCost || 0) + (prop.sharedLegalCost || 0);
+}
+
+/** Sertakan biaya investasi bersama (di luar harga per unit) dalam total. */
+function isSharedPropertyCostsEnabled(prop) {
+  if (!prop) return false;
+  if (typeof prop.sharedCostsEnabled === 'boolean') return prop.sharedCostsEnabled;
+  return getPropertySharedCostRawTotal(prop) > 0;
+}
+
+function getPropertySharedAcquisitionTotal(prop) {
+  if (!isSharedPropertyCostsEnabled(prop)) return 0;
+  return getPropertySharedCostRawTotal(prop);
 }
 
 /** Total modal untuk yield/ROI (IDR). */
@@ -696,6 +904,13 @@ function togglePropertyAcquisitionBlocks(mode) {
   const s = document.getElementById('prop-acq-shared');
   if (b) b.style.display = m === 'property' ? 'block' : 'none';
   if (s) s.style.display = m === 'unit' ? 'block' : 'none';
+  if (m === 'unit') syncSharedPropertyCostsFormVisibility();
+}
+
+function syncSharedPropertyCostsFormVisibility() {
+  const cb = document.getElementById('shared-costs-toggle');
+  const body = document.getElementById('prop-shared-costs-body');
+  if (cb && body) body.style.display = cb.checked ? 'block' : 'none';
 }
 
 function syncUnitAcquisitionSection() {
@@ -1257,6 +1472,12 @@ function saveUnit(e, editId) {
   // Auto-create property record if new
   getOrCreateProperty(property);
 
+  if (!editId && !billingAllowsAddingUnits(1)) {
+    if (typeof showToast === 'function') showToast(t('billing.unitLimit', { max: BILLING_FREE_MAX_UNITS }), 'warning', 5000);
+    showBillingUpgrade();
+    return;
+  }
+
   const newFacilities = _selectedFacilities.join(',');
   const newPrice = parseNum(f.price.value);
 
@@ -1404,7 +1625,7 @@ function renderUnits() {
     const allPropUnits = units.filter(u => u.property === prop);
     const occCount = allPropUnits.filter(u => u.status === 'occupied').length;
     const totalCount = allPropUnits.length;
-    const monthlyIncome = allPropUnits.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+    const monthlyIncome = sumOccupiedMonthlyRent(allPropUnits);
     const type = allPropUnits[0]?.type || 'kos';
     const collapsed = _collapsedProps[prop] && !searchTerm;
 
@@ -2098,19 +2319,54 @@ function renderDashboard() {
   const overdue = payments.filter(p => p.status === 'overdue' && isActionableDueForDashboard(p, tenants)).length;
 
   const simple = isSimpleMode();
+  const billingPro = isBillingPro();
+  const usedUnits = getUnits().length;
+  const freeLeft = Math.max(0, BILLING_FREE_MAX_UNITS - usedUnits);
+  const planText = billingPro ? t('billing.planProShort') : t('billing.planFreeShort', { used: usedUnits, max: BILLING_FREE_MAX_UNITS });
   const greet = document.getElementById('greeting-container');
   if (!greet) return;
   greet.innerHTML = `
     <div class="greeting-banner">
-      <div class="greeting-text">${getGreeting()} 👋</div>
-      <div class="greeting-name">${getDashboardGreetingSublineHtml()}</div>
+      <div class="greeting-topline">
+        <div>
+          <div class="greeting-text">${getGreeting()} 👋</div>
+          <div class="greeting-name">${getDashboardGreetingSublineHtml()}</div>
+        </div>
+        <button type="button" class="plan-pill ${billingPro ? 'plan-pill-pro' : 'plan-pill-free'}" onclick="showBillingUpgrade()">${escapeHtml(planText)}</button>
+      </div>
       <div class="quick-stats">
         <div class="quick-stat"><span class="quick-stat-value">${total}</span><span class="quick-stat-label">${t('stat.unit')}</span></div>
         <div class="quick-stat"><span class="quick-stat-value">${occupancy}%</span><span class="quick-stat-label">${simple ? t('stat.occPct') : t('stat.occ')}</span></div>
         <div class="quick-stat"><span class="quick-stat-value">${occ}</span><span class="quick-stat-label">${simple ? t('stat.filled') : t('stat.filledPro')}</span></div>
         <div class="quick-stat"><span class="quick-stat-value" ${overdue>0?'style="color:#ef4444"':''}>${overdue}</span><span class="quick-stat-label">${t('stat.overdue')}</span></div>
       </div>
-      <button type="button" class="greeting-cal-jump" onclick="var el=document.getElementById('dash-biz-cal');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})">${t('dash.jumpCal')}</button>
+    </div>
+    <div class="mode-card">
+      <div class="mode-card-head">
+        <div>
+          <div class="section-kicker">${t('mode.kicker')}</div>
+          <h2>${simple ? t('mode.simpleTitle') : t('mode.proTitle')}</h2>
+        </div>
+        ${helpButton('modes')}
+      </div>
+      <div class="mode-switch" role="group" aria-label="${escapeHtml(t('settings.display'))}">
+        <button type="button" class="${simple ? 'active' : ''}" onclick="setUiModeFromDashboard('simple')">
+          <strong>${t('settings.simple')}</strong>
+          <span>${t('mode.simpleHint')}</span>
+        </button>
+        <button type="button" class="${!simple ? 'active' : ''}" onclick="setUiModeFromDashboard('pro')">
+          <strong>${t('settings.pro')}</strong>
+          <span>${t('mode.proHint')}</span>
+        </button>
+      </div>
+      <div class="home-actions">
+        <button type="button" class="btn btn-primary" onclick="showUnitForm()">${t('home.addUnit')}</button>
+        <button type="button" class="btn btn-secondary" onclick="navigateTo('reports', document.getElementById('nav-reports-btn'))">${simple ? t('nav.summary') : t('nav.reports')}</button>
+      </div>
+      <div class="billing-strip">
+        <span>${billingPro ? t('billing.stripPro') : t('billing.stripFree', { left: freeLeft })}</span>
+        ${helpButton('billing')}
+      </div>
     </div>`;
 
   const cfTitle = document.getElementById('dash-cf-title');
@@ -2242,6 +2498,17 @@ function changeReportPeriod(p, btn) {
   renderReports();
 }
 
+/** Dari laporan yield: ke Unit, filter pencarian nama properti, buka grup properti. */
+function goToUnitsForYieldProperty(propName) {
+  const navBtn = document.querySelector('.bottom-nav button[onclick*="units"]');
+  if (navBtn) navigateTo('units', navBtn);
+  else navigateTo('units');
+  const searchEl = document.getElementById('search-unit');
+  if (searchEl) searchEl.value = propName || '';
+  if (propName) _collapsedProps[propName] = false;
+  renderUnits();
+}
+
 function renderReports() {
   if (isSimpleMode()) {
     reportTab = 'overview';
@@ -2287,10 +2554,10 @@ function renderOverview() {
   const pnl = document.getElementById('report-per-property');
   if (!props.length) pnl.innerHTML = '<p class="empty-state">' + t('chart.noData') + '</p>';
   else {
-    const mx = Math.max(...props.map(pr => Math.abs(pp.filter(p=>p.propertyName===pr&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0) - pp.filter(p=>p.propertyName===pr&&p.type==='expense').reduce((s,p)=>s+p.amount,0))),1);
+    const mx = Math.max(...props.map(pr => Math.abs(sumPaidIncomeForProperty(pp, pr) - sumExpenseAmountForProperty(pp, pr))), 1);
     pnl.innerHTML = props.map(pr => {
-      const i = pp.filter(p=>p.propertyName===pr&&p.type==='income'&&p.status==='paid').reduce((s,p)=>s+p.amount,0);
-      const e = pp.filter(p=>p.propertyName===pr&&p.type==='expense').reduce((s,p)=>s+p.amount,0);
+      const i = sumPaidIncomeForProperty(pp, pr);
+      const e = sumExpenseAmountForProperty(pp, pr);
       const pf = i-e, bw = mx>0?Math.abs(pf)/mx*100:0, pos = pf>=0;
       return `<div class="pnl-row"><div class="pnl-header"><span class="pnl-name">${escapeHtml(pr)}</span><span class="pnl-profit ${pos?'positive':'negative'}">${pos?'+':''}${formatRpFull(pf)}</span></div>
         <div class="pnl-bar"><div class="pnl-bar-fill ${pos?'positive':'negative'}" style="width:${bw}%"></div></div></div>`;
@@ -2328,8 +2595,8 @@ function buildOverviewExportContext() {
 
   const props = [...new Set(units.map(u => u.property))];
   const pnlRows = props.map(pr => {
-    const i = pp.filter(p => p.propertyName === pr && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-    const e = pp.filter(p => p.propertyName === pr && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    const i = sumPaidIncomeForProperty(pp, pr);
+    const e = sumExpenseAmountForProperty(pp, pr);
     return { property: pr, income: i, expense: e, net: i - e };
   });
 
@@ -2378,6 +2645,7 @@ function expenseCategoryPlain(id) {
  * CSV untuk pajak / akuntansi: kolom Amount_IDR angka bulat (mudah SUM di Excel), grup per bagian.
  */
 function exportOverviewReportCsv() {
+  if (!requireBillingProForExport()) return;
   const ctx = buildOverviewExportContext();
   const rows = [];
   const slug = ctx.reportPeriod === 'month' ? ctx.cp : `year-${ctx.cp}`;
@@ -2455,7 +2723,7 @@ function exportOverviewReportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `propertiKu-tax-${slug}.csv`;
+  a.download = `landlordKu-tax-${slug}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   if (typeof showToast === 'function') showToast(t('rpt.exportDone'), 'success', 2500);
@@ -2542,6 +2810,7 @@ function buildTaxReportPrintHtml(ctx) {
 
 /** PDF ringan: buka jendela siap cetak → simpan sebagai PDF dari dialog browser. */
 function exportOverviewReportPdf() {
+  if (!requireBillingProForExport()) return;
   const ctx = buildOverviewExportContext();
   const html = buildTaxReportPrintHtml(ctx);
   const w = window.open('', '_blank');
@@ -2649,14 +2918,14 @@ function renderYield() {
     const occCount = pu.filter(u=>u.status==='occupied').length;
     const occRate = pu.length > 0 ? Math.round(occCount / pu.length * 100) : 0;
 
-    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
-    const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
+    const monthlyRent = sumOccupiedMonthlyRent(pu);
+    const potentialRent = sumListedMonthlyRent(pu);
     const yearIncome = monthlyRent * 12;
     const yearIncomeIfFull = potentialRent * 12;
 
     // Recorded operational expenses from payments
     const cy = getYear();
-    const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
+    const recordedExpense = sumRecordedExpenseForPropertyYear(payments, prop, cy);
 
     // Unit-level annual costs (IPL, sinking fund, PBB unit, etc.)
     const unitsCost = getAllUnitsAnnualCost(pu);
@@ -2686,6 +2955,40 @@ function renderYield() {
       compHtml += `<tr onclick="showPropertySettings(${onclickStrArg(prop)})"><td style="font-weight:700">${escapeHtml(prop)}</td><td>${grossYield !== '-' ? grossYield+'%' : '-'}</td><td style="color:${badgeColor};font-weight:800">${netYield !== '-' ? netYield+'%' : '-'}</td><td>${effectiveYield !== '-' ? effectiveYield+'%' : '-'}</td><td>${paybackLabel}</td></tr>`;
     }
 
+    const sharedAcq = getPropertySharedAcquisitionTotal(pd);
+    const sumUnitAcq = pu.reduce((s, u) => s + getUnitAcquisitionTotal(u), 0);
+    const allUnitCapZero = pu.length > 0 && pu.every(u => getUnitAcquisitionTotal(u) === 0);
+    const legacyPurchaseUnused = acqMode === 'unit' && (pd.purchasePrice || 0) > 0 && sumUnitAcq === 0 && sharedAcq === 0;
+
+    let investContextBanner = '';
+    if (acqMode === 'property') {
+      investContextBanner = `<div class="yield-invest-banner yield-invest-banner--muted" role="note"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldPropertyModeHint'))}</p></div>`;
+    } else if (acqMode === 'unit' && pu.length) {
+      const cta = `<div class="yield-invest-banner-actions">
+        <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px" onclick="event.stopPropagation();showPropertySettings(${onclickStrArg(prop)})">${escapeHtml(t('rpt.configureInvest'))}</button>
+        <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px" onclick="event.stopPropagation();goToUnitsForYieldProperty(${onclickStrArg(prop)})">${escapeHtml(t('rpt.goToUnitList'))}</button>
+      </div>`;
+      if (legacyPurchaseUnused) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--warn" role="alert"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldPropertyPurchaseUnused'))}</p>${cta}</div>`;
+      } else if (allUnitCapZero && sharedAcq > 0) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--info" role="status"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldSharedExplainsTotal', { amt: formatRpFull(sharedAcq) }))}</p>${cta}</div>`;
+      } else if (allUnitCapZero && acquisitionTotal <= 0) {
+        investContextBanner = `<div class="yield-invest-banner yield-invest-banner--info" role="status"><p class="yield-invest-banner-text">${escapeHtml(t('rpt.yieldNoUnitCapitalYet'))}</p>${cta}</div>`;
+      }
+    }
+
+    const unitBreakdownHtml = acqMode === 'unit' && pu.length
+      ? (() => {
+          const rows = pu.map(ux => `<tr><td>${escapeHtml(ux.name)}</td><td>${formatRp(getUnitAcquisitionTotal(ux))}</td><td>${getUnitMonthlyMortgage(ux) > 0 ? formatRp(getUnitMonthlyMortgage(ux)) : '—'}</td></tr>`).join('');
+          const sharedRow = sharedAcq > 0
+            ? `<tr class="yield-shared-row"><td><em>${escapeHtml(t('rpt.sharedCapitalRow'))}</em></td><td style="font-weight:600">${formatRp(sharedAcq)}</td><td>—</td></tr>`
+            : '';
+          const tbodyOrder = (sharedAcq > 0 && allUnitCapZero) ? (sharedRow + rows) : (rows + sharedRow);
+          const foot = `<p class="yield-cap-micro" style="margin:6px 0 0 0;line-height:1.45">${escapeHtml(t('rpt.yieldUnitTableFootnote'))}</p>`;
+          return `<div class="yield-compare-table" style="margin:6px 0 10px 0"><table class="compare-table" style="font-size:12px"><thead><tr><th>${t('rpt.colUnit')}</th><th>${t('rpt.unitCapitalShort')}</th><th>${t('rpt.unitMortgageMo')}</th></tr></thead><tbody>${tbodyOrder}</tbody></table></div>${foot}`;
+        })()
+      : '';
+
     return `<div class="yield-card">
       <div class="yield-card-header">
         <span class="yield-card-name">${escapeHtml(prop)}</span>
@@ -2693,7 +2996,8 @@ function renderYield() {
       </div>
       <div class="yield-section-title">${t('rpt.investmentSection')}</div>
       <div class="yield-row"><span>${acqMode === 'unit' ? t('rpt.totalCapital') : t('rpt.purchasePrice')}</span><span style="font-weight:700">${acquisitionTotal>0?formatRpFull(acquisitionTotal):'<span style="color:var(--warning-dark)">' + escapeHtml(t('rpt.notFilledShort')) + '</span>'}</span></div>
-      ${acqMode === 'unit' && pu.length ? `<div class="yield-compare-table" style="margin:6px 0 10px 0"><table class="compare-table" style="font-size:12px"><thead><tr><th>${t('rpt.colUnit')}</th><th>${t('rpt.unitCapitalShort')}</th><th>${t('rpt.unitMortgageMo')}</th></tr></thead><tbody>` + pu.map(ux => `<tr><td>${escapeHtml(ux.name)}</td><td>${formatRp(getUnitAcquisitionTotal(ux))}</td><td>${getUnitMonthlyMortgage(ux) > 0 ? formatRp(getUnitMonthlyMortgage(ux)) : '—'}</td></tr>`).join('') + `</tbody></table></div>` : ''}
+      ${investContextBanner}
+      ${unitBreakdownHtml}
       <div class="yield-section-title">${t('rpt.incomeSection')}</div>
       <div class="yield-row"><span>${t('rpt.actualRentMo', { n: occCount })}</span><span style="color:var(--success)">${formatRp(monthlyRent)}</span></div>
       <div class="yield-row"><span>${t('rpt.potentialRentMo', { n: pu.length })}</span><span>${formatRp(potentialRent)}</span></div>
@@ -2807,11 +3111,11 @@ function renderProyeksi() {
     const cicilanPerTahun = cicilanPerBulan * 12;
 
     const occCount = pu.filter(u=>u.status==='occupied').length;
-    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
+    const monthlyRent = sumOccupiedMonthlyRent(pu);
     const yearIncome = monthlyRent * 12;
 
     const cy = getYear();
-    const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
+    const recordedExpense = sumRecordedExpenseForPropertyYear(payments, prop, cy);
     const unitsCost = getAllUnitsAnnualCost(pu);
     const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
     const netAnnualProfit = yearIncome - totalAnnualExpense;
@@ -2976,14 +3280,14 @@ function renderMultiProperty() {
     const occCount = pu.filter(u=>u.status==='occupied').length;
     const vacCount = pu.length - occCount;
     const occRate = pu.length>0 ? Math.round(occCount/pu.length*100) : 0;
-    const monthInc = payments.filter(p => p.propertyName === prop && paymentMatchesCalendarMonth(p, cm) && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-    const monthExp = payments.filter(p => p.propertyName === prop && paymentMatchesCalendarMonth(p, cm) && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    const monthInc = sumPaidIncomeForPropertyMonth(payments, prop, cm);
+    const monthExp = sumExpenseForPropertyMonth(payments, prop, cm);
     const net = monthInc - monthExp;
-    const potentialRent = pu.reduce((s,u)=>s+getUnitMonthlyRent(u),0);
-    const monthlyRent = pu.filter(u=>u.status==='occupied').reduce((s,u)=>s+getUnitMonthlyRent(u),0);
+    const potentialRent = sumListedMonthlyRent(pu);
+    const monthlyRent = sumOccupiedMonthlyRent(pu);
     const yearIncome = monthlyRent * 12;
     const cy = getYear();
-    const recordedExpense = payments.filter(p=>p.propertyName===prop&&p.type==='expense'&&p.period.startsWith(cy)).reduce((s,p)=>s+p.amount,0);
+    const recordedExpense = sumRecordedExpenseForPropertyYear(payments, prop, cy);
     const unitsCostMulti = getAllUnitsAnnualCost(pu);
     const totalAnnualExpense = fixedCosts + unitsCostMulti + recordedExpense;
     const netYield = acquisitionTotal > 0 ? (((yearIncome - totalAnnualExpense) / acquisitionTotal) * 100).toFixed(1) : '-';
@@ -3135,7 +3439,7 @@ function kprSelectProperty(propName) {
   }
   const pd = getPropertyData(propName);
   const propUnits = getUnits().filter(u => u.property === propName);
-  const potentialRent = propUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+  const potentialRent = sumListedMonthlyRent(propUnits);
   const unitsCost = getAllUnitsAnnualCost(propUnits);
   const propCost = getPropertyAnnualCost(pd);
 
@@ -3179,9 +3483,8 @@ function renderKPRUnitBreakdown(propName, units, pd) {
   if (!units.length) { el.innerHTML = ''; return; }
 
   const occupiedUnits = units.filter(u => u.status === 'occupied');
-  const vacantUnits = units.filter(u => u.status === 'vacant');
-  const totalMonthlyRent = units.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
-  const actualMonthlyRent = occupiedUnits.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+  const totalMonthlyRent = sumListedMonthlyRent(units);
+  const actualMonthlyRent = sumOccupiedMonthlyRent(units);
   const totalMonthlyCost = units.reduce((s, u) => s + getUnitMonthlyCost(u), 0);
   const propMonthlyCost = (getPropertyAnnualCost(pd)) / 12;
 
@@ -3315,8 +3618,8 @@ function calcKPR() {
   let overlayHtml = '';
   if (selectedProp) {
     const units = getUnits().filter(u => u.property === selectedProp);
-    const monthlyRent = units.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
-    const potentialRent = units.reduce((s, u) => s + getUnitMonthlyRent(u), 0);
+    const monthlyRent = sumOccupiedMonthlyRent(units);
+    const potentialRent = sumListedMonthlyRent(units);
     const totalMonthlyOut = monthlyFixed + monthlyInsurance;
     const cashflowFixed = monthlyRent - totalMonthlyOut;
     const totalMonthlyOutFloat = monthlyFloating + monthlyInsurance;
@@ -3626,6 +3929,7 @@ function showPropertySettings(propName) {
   }
 
   const acqMode = getPropertyAcquisitionMode(pd);
+  const sharedToggleOn = isSharedPropertyCostsEnabled(pd);
 
   openModal(t('prop.settingsTitle', { name: propName }), `
     <form onsubmit="savePropertySettings(event, ${onclickStrArg(propName)})">
@@ -3667,14 +3971,23 @@ function showPropertySettings(propName) {
           <small style="color:var(--text-muted);font-size:12px">${t('form.tenorHint')}</small></div>
       </div>
       <div id="prop-acq-shared" style="display:${acqMode === 'unit' ? 'block' : 'none'}">
-        <div class="form-group"><label class="form-label">${t('form.sharedSetupCost')}</label>
-          <input class="form-input" name="sharedSetupCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedSetupCost ? formatNumDots(pd.sharedSetupCost) : ''}">
-          <small style="color:var(--text-muted);font-size:12px">${t('form.sharedSetupHint')}</small></div>
-        <div class="form-group"><label class="form-label">${t('form.sharedRenoCost')}</label>
-          <input class="form-input" name="sharedRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedRenovationCost ? formatNumDots(pd.sharedRenovationCost) : ''}"></div>
-        <div class="form-group"><label class="form-label">${t('form.sharedLegalCost')}</label>
-          <input class="form-input" name="sharedLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedLegalCost ? formatNumDots(pd.sharedLegalCost) : ''}"></div>
-        <small style="color:var(--text-muted);font-size:12px;display:block;margin-bottom:12px">${t('form.sharedCostsFooter')}</small>
+        <div class="form-group" style="margin-bottom:8px">
+          <label for="shared-costs-toggle" class="form-label" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600;line-height:1.35">
+            <input type="checkbox" name="sharedCostsEnabled" id="shared-costs-toggle" style="width:20px;height:20px;flex-shrink:0;margin-top:2px" ${sharedToggleOn ? 'checked' : ''} onchange="syncSharedPropertyCostsFormVisibility()">
+            <span>${t('form.sharedCostsToggle')}</span>
+          </label>
+          <small style="color:var(--text-muted);font-size:12px;display:block;margin:6px 0 0 30px">${t('form.sharedCostsToggleHint')}</small>
+        </div>
+        <div id="prop-shared-costs-body" style="display:${sharedToggleOn ? 'block' : 'none'}">
+          <div class="form-group"><label class="form-label">${t('form.sharedSetupCost')}</label>
+            <input class="form-input" name="sharedSetupCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedSetupCost ? formatNumDots(pd.sharedSetupCost) : ''}">
+            <small style="color:var(--text-muted);font-size:12px">${t('form.sharedSetupHint')}</small></div>
+          <div class="form-group"><label class="form-label">${t('form.sharedRenoCost')}</label>
+            <input class="form-input" name="sharedRenovationCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedRenovationCost ? formatNumDots(pd.sharedRenovationCost) : ''}"></div>
+          <div class="form-group"><label class="form-label">${t('form.sharedLegalCost')}</label>
+            <input class="form-input" name="sharedLegalCost" type="text" inputmode="numeric" data-rp placeholder="0" value="${pd.sharedLegalCost ? formatNumDots(pd.sharedLegalCost) : ''}"></div>
+          <small style="color:var(--text-muted);font-size:12px;display:block;margin-bottom:12px">${t('form.sharedCostsFooter')}</small>
+        </div>
       </div>
       <div class="prop-settings-divider"></div>
       <div class="form-group"><label class="form-label">${t('form.pbbYr')}</label>
@@ -3764,6 +4077,8 @@ function savePropertySettings(e, oldPropName) {
   prop.acquisitionCost = parseNum(f.acquisitionCost?.value) || 0;
   prop.renovationCost = parseNum(f.renovationCost?.value) || 0;
   prop.legalCost = parseNum(f.legalCost?.value) || 0;
+  const scCb = f.querySelector && f.querySelector('#shared-costs-toggle');
+  prop.sharedCostsEnabled = !!(scCb && scCb.checked);
   prop.sharedSetupCost = parseNum(f.sharedSetupCost?.value) || 0;
   prop.sharedRenovationCost = parseNum(f.sharedRenovationCost?.value) || 0;
   prop.sharedLegalCost = parseNum(f.sharedLegalCost?.value) || 0;
@@ -3974,6 +4289,19 @@ function saveBulkUnits(e, propName) {
   const type = units.find(u => u.property === propName)?.type || 'kos';
   const existingNames = new Set(units.filter(u => u.property === propName).map(u => u.name));
 
+  let wouldAdd = 0;
+  for (let i = start; i <= end; i++) {
+    if (skipNums.includes(i)) continue;
+    const name = prefix ? `${prefix} ${i}` : `${i}`;
+    if (existingNames.has(name)) continue;
+    wouldAdd++;
+  }
+  if (!billingAllowsAddingUnits(wouldAdd)) {
+    if (typeof showToast === 'function') showToast(t('billing.bulkNeedPro', { max: BILLING_FREE_MAX_UNITS }), 'warning', 5500);
+    showBillingUpgrade();
+    return;
+  }
+
   // Get template facilities if subtype exists
   const tpl = subtype ? getSubtypeTemplate(propName, subtype) : null;
   const facilities = tpl?.facilities || '';
@@ -4033,7 +4361,7 @@ async function sendTelegramReminder() {
 
   if (!pending.length) { alert(t('msg.tgNoBillsManualReminder')); return; }
 
-  let msg = '🏠 *PropertiKu — Reminder Sewa*\n\n';
+  let msg = '🏠 *LandlordKu — Reminder Sewa*\n\n';
   pending.forEach(p => {
     const tn = tenants.find(x => x.id === p.tenantId);
     const d = daysUntil(p.dueDate);
@@ -4078,20 +4406,34 @@ function showSettings() {
   const isDark = getTheme() === 'dark';
   const um = getUiMode();
   openModal(t('settings.title'), `
-    <div class="form-group" style="margin-bottom:20px">
-      <label class="form-label">${t('settings.display')}</label>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <label class="form-label">${t('settings.display')}</label>
+        ${helpButton('modes')}
+      </div>
       <div class="ui-mode-segment">
         <button type="button" class="ui-mode-btn ${um === 'simple' ? 'active' : ''}" onclick="setUiModeFromSettings('simple')">${t('settings.simple')}</button>
         <button type="button" class="ui-mode-btn ${um === 'pro' ? 'active' : ''}" onclick="setUiModeFromSettings('pro')">${t('settings.pro')}</button>
       </div>
-      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.modeHelp')}</small>
     </div>
 
-    <div class="form-group" style="margin-bottom:20px">
+    <div class="settings-card">
       <label class="form-label">${t('settings.ownerGreet')}</label>
       <input type="text" id="settings-owner-name" class="form-input" maxlength="40" autocomplete="name" placeholder="${t('owner.namePh')}" value="${escapeHtml(getOwnerDisplayName())}">
-      <small style="display:block;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.45">${t('settings.ownerHelp')}</small>
       <button type="button" class="btn btn-primary" style="width:100%;margin-top:12px" onclick="saveOwnerProfileFromSettings()">${t('settings.saveGreet')}</button>
+    </div>
+
+    <div class="settings-card plan-settings-card">
+      <div class="settings-card-head">
+        <label class="form-label">${t('billing.sectionTitle')}</label>
+        ${helpButton('billing')}
+      </div>
+      <div class="plan-status-line">
+        ${isBillingPro()
+    ? escapeHtml(t('billing.statusPro'))
+    : escapeHtml(t('billing.statusFree', { used: getUnits().length, max: BILLING_FREE_MAX_UNITS }))}
+      </div>
+      <button type="button" class="btn btn-outline" style="width:100%" onclick="showBillingUpgrade()">${isBillingPro() ? t('billing.openPromo') : t('billing.upgradeCta')}</button>
     </div>
 
     <div class="form-group" style="margin-bottom:20px">
@@ -4120,16 +4462,10 @@ function showSettings() {
 
     <div class="yield-divider" style="margin:16px 0"></div>
 
-    <div class="settings-info">
-      ${t('settings.tgIntro')}
-    </div>
-
-    <div class="card" style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:10px">${t('settings.tgSetup')}</div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
-        ${t('settings.tgSteps')}
-      </div>
-    </div>
+    <details class="settings-help-details">
+      <summary>${t('settings.tgSetup')} ${helpButton('reminders')}</summary>
+      <div class="settings-help-body">${t('settings.tgSteps')}</div>
+    </details>
 
     <form onsubmit="saveSettingsForm(event)">
       <div class="form-group" style="margin-bottom:16px">
@@ -4222,7 +4558,7 @@ async function testTelegramConnection() {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: '✅ PropertiKu berhasil terhubung!\n\nBot ini akan mengirim reminder tagihan sewa.', parse_mode: 'Markdown' })
+      body: JSON.stringify({ chat_id: chatId, text: '✅ LandlordKu berhasil terhubung!\n\nBot ini akan mengirim reminder tagihan sewa.', parse_mode: 'Markdown' })
     });
     const data = await res.json();
     if (data.ok) {
@@ -4331,7 +4667,7 @@ function buildReminderIcsCalendar(prefList) {
   const list = Array.isArray(prefList) ? prefList : getReminderScopePayments();
   const now = new Date();
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-  let out = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//PropertiKu//Reminder//ID\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  let out = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LandlordKu//Reminder//ID\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
   for (const p of list) {
     const ymd = formatIcsDateCompact(p.dueDate);
     if (!ymd) continue;
@@ -4486,7 +4822,7 @@ async function autoReminderCheck() {
 
   const needReminder = [...upcoming, ...overdue];
   if (needReminder.length === 0) return;
-  let msg = '🏠 *PropertiKu — Reminder Otomatis*\n';
+  let msg = '🏠 *LandlordKu — Reminder Otomatis*\n';
   msg += `📅 ${new Date().toLocaleDateString(dateLocaleTag(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
 
   if (overdue.length > 0) {
@@ -4538,12 +4874,12 @@ function validateBackupImport(data) {
   }
   const keys = Object.keys(data).filter(k => k.startsWith('propertiKu_'));
   if (keys.length === 0) {
-    return { ok: false, msg: 'Tidak ada data PropertiKu (kunci propertiKu_*).' };
+    return { ok: false, msg: 'Tidak ada data backup LandlordKu (kunci propertiKu_*).' };
   }
   for (const k of keys) {
     const v = data[k];
     if (typeof v !== 'string') {
-      return { ok: false, msg: 'Format backup tidak dikenali: nilai harus berupa string (export asli PropertiKu).' };
+      return { ok: false, msg: 'Format backup tidak dikenali: nilai harus berupa string (format export LandlordKu).' };
     }
   }
   for (const short of BACKUP_ARRAY_KEYS) {
@@ -4573,7 +4909,7 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `propertiKu-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `landlordKu-backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -4814,7 +5150,7 @@ ${unit.facilities ? '<tr><td>Fasilitas</td><td>: ' + unit.facilities.split(',').
 <div class="sig-box"><div>PIHAK KEDUA</div><div class="sig-line">(${tenant.name})</div></div>
 </div>
 
-<p style="text-align:center;font-size:10pt;color:#888;margin-top:40px">Dokumen ini digenerate oleh PropertiKu pada ${fmtDate(today)}</p>
+<p style="text-align:center;font-size:10pt;color:#888;margin-top:40px">Dokumen ini digenerate oleh LandlordKu pada ${fmtDate(today)}</p>
 </body></html>`;
 }
 
@@ -4848,8 +5184,8 @@ function renderROICards() {
     if (totalInvestment <= 0) return '';
 
     const pu = units.filter(u => u.property === prop);
-    const totalIncome = payments.filter(p => p.propertyName === prop && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-    const totalExpense = payments.filter(p => p.propertyName === prop && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    const totalIncome = sumPaidIncomeForProperty(payments, prop);
+    const totalExpense = sumExpenseAmountForProperty(payments, prop);
     const netProfit = totalIncome - totalExpense;
     const actualROI = totalInvestment > 0 ? (netProfit / totalInvestment * 100).toFixed(1) : 0;
 
@@ -5014,6 +5350,22 @@ function collectBusinessReminders(contractDays = 60, permitDays = 90) {
 
 const STRESS_SLIDER_MAX = 200;
 const STRESS_VALUE_MAX = 1000;
+/** Sewa turun: maks 99% (slider + manual) — di atas itu tidak masuk akal vs sewa efektif. */
+const STRESS_RENT_DOWN_MAX = 99;
+/** Vacancy: maks 100% (100% = faktor sewa dari okupansi = 0; di atas 100% bikin pengali negatif). */
+const STRESS_VACANCY_MAX = 100;
+
+function stressSliderMax(suffix) {
+  if (suffix === 'r') return STRESS_RENT_DOWN_MAX;
+  if (suffix === 'v') return STRESS_VACANCY_MAX;
+  return STRESS_SLIDER_MAX;
+}
+
+function stressValueMax(suffix) {
+  if (suffix === 'r') return STRESS_RENT_DOWN_MAX;
+  if (suffix === 'v') return STRESS_VACANCY_MAX;
+  return STRESS_VALUE_MAX;
+}
 
 function stressStorageKey(suffix) {
   const map = { v: 'stress_vacancy_pct', r: 'stress_rent_down_pct', e: 'stress_expense_up_pct', c: 'stress_cicilan_up_pct' };
@@ -5027,9 +5379,19 @@ function clampStressStored(raw) {
 }
 
 function getStressParams() {
+  let rentDown = clampStressStored(DB.getVal('stress_rent_down_pct'));
+  if (rentDown > STRESS_RENT_DOWN_MAX) {
+    rentDown = STRESS_RENT_DOWN_MAX;
+    DB.setVal('stress_rent_down_pct', String(rentDown));
+  }
+  let vacancy = clampStressStored(DB.getVal('stress_vacancy_pct'));
+  if (vacancy > STRESS_VACANCY_MAX) {
+    vacancy = STRESS_VACANCY_MAX;
+    DB.setVal('stress_vacancy_pct', String(vacancy));
+  }
   return {
-    vacancy: clampStressStored(DB.getVal('stress_vacancy_pct')),
-    rentDown: clampStressStored(DB.getVal('stress_rent_down_pct')),
+    vacancy,
+    rentDown,
     expenseUp: clampStressStored(DB.getVal('stress_expense_up_pct')),
     cicilanUp: clampStressStored(DB.getVal('stress_cicilan_up_pct'))
   };
@@ -5041,7 +5403,8 @@ function formatStressInputField(n) {
 }
 
 function onStressRangeInput(suffix, el) {
-  const v = Math.min(STRESS_SLIDER_MAX, Math.max(0, parseFloat(el.value) || 0));
+  const cap = stressSliderMax(suffix);
+  const v = Math.min(cap, Math.max(0, parseFloat(el.value) || 0));
   DB.setVal(stressStorageKey(suffix), String(v));
   const num = document.getElementById('stress-in-' + suffix);
   if (num) num.value = formatStressInputField(v);
@@ -5050,13 +5413,15 @@ function onStressRangeInput(suffix, el) {
 
 /** onchange: full commit (avoid re-rendering on every keypress while typing multi-digit). */
 function onStressNumberCommit(suffix, el) {
+  const vmax = stressValueMax(suffix);
+  const smax = stressSliderMax(suffix);
   let v = parseFloat(String(el.value).replace(',', '.'));
   if (Number.isNaN(v) || v < 0) v = 0;
-  if (v > STRESS_VALUE_MAX) v = STRESS_VALUE_MAX;
+  if (v > vmax) v = vmax;
   el.value = formatStressInputField(v);
   DB.setVal(stressStorageKey(suffix), String(v));
   const range = document.getElementById('stress-range-' + suffix);
-  if (range) range.value = String(Math.min(v, STRESS_SLIDER_MAX));
+  if (range) range.value = String(Math.min(v, smax));
   if (!updateStressResultTableOnly()) renderStressTest();
 }
 
@@ -5091,14 +5456,16 @@ function buildStressResultTableBody() {
   const vacM = 1 - vacancy / 100;
   const expM = 1 + expenseUp / 100;
   const cicM = 1 + cicilanUp / 100;
+  const pos = 'var(--success)';
+  const neg = 'var(--danger)';
   let rows = '';
   let sumBase = 0;
   let sumStress = 0;
   props.forEach(prop => {
     const pu = units.filter(u => u.property === prop);
     const pd = getPropertyData(prop);
-    const monthlyRent = pu.filter(u => u.status === 'occupied').reduce((s, u) => s + getUnitMonthlyRent(u), 0);
-    const recordedExpense = payments.filter(p => p.propertyName === prop && p.type === 'expense' && p.period.startsWith(cy)).reduce((s, p) => s + p.amount, 0);
+    const monthlyRent = sumOccupiedMonthlyRent(pu);
+    const recordedExpense = sumRecordedExpenseForPropertyYear(payments, prop, cy);
     const unitsCost = getAllUnitsAnnualCost(pu);
     const fixedCosts = getPropertyAnnualCost(pd);
     const totalAnnualExpense = fixedCosts + unitsCost + recordedExpense;
@@ -5108,11 +5475,13 @@ function buildStressResultTableBody() {
     const adjExp = (totalAnnualExpense / 12) * expM;
     const adjCic = cicilan * cicM;
     const stressMo = adjRent - adjExp - adjCic;
+    const deltaMo = stressMo - baseMo;
     sumBase += baseMo;
     sumStress += stressMo;
-    rows += `<tr><td style="font-weight:700">${escapeHtml(prop)}</td><td>${formatRp(Math.round(baseMo))}</td><td style="color:${stressMo >= baseMo ? 'var(--success)' : 'var(--danger)'};font-weight:700">${formatRp(Math.round(stressMo))}</td><td>${stressMo >= baseMo ? '+' : ''}${formatRp(Math.round(stressMo - baseMo))}</td></tr>`;
+    rows += `<tr><td style="font-weight:700">${escapeHtml(prop)}</td><td style="color:${baseMo >= 0 ? pos : neg};font-weight:700">${formatRp(Math.round(baseMo))}</td><td style="color:${stressMo >= 0 ? pos : neg};font-weight:700">${formatRp(Math.round(stressMo))}</td><td style="color:${deltaMo >= 0 ? pos : neg};font-weight:700">${deltaMo >= 0 ? '+' : ''}${formatRp(Math.round(deltaMo))}</td></tr>`;
   });
-  const totalTr = `<tr id="stress-total-row" style="font-weight:800;background:var(--primary-glow)"><td>${t('stress.total')}</td><td>${formatRp(Math.round(sumBase))}</td><td>${formatRp(Math.round(sumStress))}</td><td>${sumStress >= sumBase ? '+' : ''}${formatRp(Math.round(sumStress - sumBase))}</td></tr>`;
+  const sumDelta = sumStress - sumBase;
+  const totalTr = `<tr id="stress-total-row" style="font-weight:800;background:var(--primary-glow)"><td>${t('stress.total')}</td><td style="color:${sumBase >= 0 ? pos : neg}">${formatRp(Math.round(sumBase))}</td><td style="color:${sumStress >= 0 ? pos : neg}">${formatRp(Math.round(sumStress))}</td><td style="color:${sumDelta >= 0 ? pos : neg}">${sumDelta >= 0 ? '+' : ''}${formatRp(Math.round(sumDelta))}</td></tr>`;
   return { empty: false, bodyHtml: rows + totalTr, sumBase, sumStress };
 }
 
@@ -5131,8 +5500,8 @@ function renderStressTest() {
   const sRen = formatStressInputField(rentDown);
   const sExp = formatStressInputField(expenseUp);
   const sCic = formatStressInputField(cicilanUp);
-  const rVac = Math.min(vacancy, STRESS_SLIDER_MAX);
-  const rRen = Math.min(rentDown, STRESS_SLIDER_MAX);
+  const rVac = Math.min(vacancy, STRESS_VACANCY_MAX);
+  const rRen = Math.min(rentDown, STRESS_RENT_DOWN_MAX);
   const rExp = Math.min(expenseUp, STRESS_SLIDER_MAX);
   const rCic = Math.min(cicilanUp, STRESS_SLIDER_MAX);
 
@@ -5140,22 +5509,22 @@ function renderStressTest() {
     ${explanationToggleBtn()}
     <div class="card">
       <h3 class="card-title">${t('stress.title')}</h3>
-      <p class="yield-cap-micro">${t('stress.blurb')}</p>
-      <p class="yield-cap-micro" style="margin-top:4px;font-size:11px;opacity:0.95">${t('stress.sliderHint')}</p>
+      <p class="stress-help-blurb">${t('stress.blurb')}</p>
+      <p class="stress-help-detail">${t('stress.sliderHint')}</p>
       <div class="stress-sliders" style="margin-top:16px">
         <label class="stress-slider-row">
           <span>${t('stress.vacancy')}</span>
-          <input type="range" id="stress-range-v" min="0" max="${STRESS_SLIDER_MAX}" value="${rVac}" oninput="onStressRangeInput('v', this)">
+          <input type="range" id="stress-range-v" min="0" max="${STRESS_VACANCY_MAX}" value="${rVac}" oninput="onStressRangeInput('v', this)">
           <div class="stress-num-wrap">
-            <input type="number" class="form-input stress-num" id="stress-in-v" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sVac}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('v', this)">
+            <input type="number" class="form-input stress-num" id="stress-in-v" min="0" max="${STRESS_VACANCY_MAX}" step="0.1" value="${sVac}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('v', this)">
             <span class="stress-pct-suffix" aria-hidden="true">%</span>
           </div>
         </label>
         <label class="stress-slider-row">
           <span>${t('stress.rentDown')}</span>
-          <input type="range" id="stress-range-r" min="0" max="${STRESS_SLIDER_MAX}" value="${rRen}" oninput="onStressRangeInput('r', this)">
+          <input type="range" id="stress-range-r" min="0" max="${STRESS_RENT_DOWN_MAX}" value="${rRen}" oninput="onStressRangeInput('r', this)">
           <div class="stress-num-wrap">
-            <input type="number" class="form-input stress-num" id="stress-in-r" min="0" max="${STRESS_VALUE_MAX}" step="0.1" value="${sRen}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('r', this)">
+            <input type="number" class="form-input stress-num" id="stress-in-r" min="0" max="${STRESS_RENT_DOWN_MAX}" step="0.1" value="${sRen}" inputmode="decimal" aria-label="${escapeHtml(t('stress.ariaPercent'))}" onchange="onStressNumberCommit('r', this)">
             <span class="stress-pct-suffix" aria-hidden="true">%</span>
           </div>
         </label>
@@ -5372,8 +5741,8 @@ function renderCharts() {
   // 3. Profit per Property (bar chart)
   const props = [...new Set(units.map(u => u.property))];
   const barData = props.map(prop => {
-    const inc = payments.filter(p => p.propertyName === prop && p.type === 'income' && p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-    const exp = payments.filter(p => p.propertyName === prop && p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+    const inc = sumPaidIncomeForProperty(payments, prop);
+    const exp = sumExpenseAmountForProperty(payments, prop);
     return { label: prop, values: [inc, exp] };
   });
 
@@ -5424,6 +5793,7 @@ function explanationToggleBtn() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initLocale === 'function') initLocale();
+  migrateBillingPlanOnce();
   applyUiMode();
   syncPageTitle();
   applyExplanationPref();
@@ -5451,9 +5821,9 @@ document.addEventListener('DOMContentLoaded', () => {
   syncUnitOccupancyFromTenants();
   renderDashboard();
   if (!document.getElementById('dash-biz-cal')) {
-    console.warn('[PropertiKu] #dash-biz-cal missing — index.html or cache may be stale. Hard refresh, or open via serve script and close other app tabs.');
+    console.warn('[LandlordKu] #dash-biz-cal missing — index.html or cache may be stale. Hard refresh, or open via serve script and close other app tabs.');
   } else {
-    console.info('[PropertiKu] Business calendar card is present below the green banner (jump button available).');
+    console.info('[LandlordKu] Business calendar card is present below the green banner (jump button available).');
   }
   // Auto-send Telegram reminder if needed
   autoReminderCheck();

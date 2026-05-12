@@ -19,7 +19,7 @@ try { $listener.Start() } catch {
   }
 }
 
-Write-Host "PropertiKu server running on http://localhost:$port/" -ForegroundColor Green
+Write-Host "LandlordKu server running on http://localhost:$port/" -ForegroundColor Green
 
 while ($true) {
   $client = $listener.AcceptTcpClient()

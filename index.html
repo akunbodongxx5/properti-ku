@@ -6,13 +6,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0d9488">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <title data-i18n="meta.title">PropertiKu — Manajemen Properti Sewa</title>
+  <title data-i18n="meta.title">LandlordKu — Manajemen Properti Sewa</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=55">
+  <link rel="stylesheet" href="styles.css?v=71">
 </head>
 <body>
   <script>
@@ -24,7 +24,7 @@
             return Promise.all(regs.map(function (r) { return r.unregister(); }));
           }),
           typeof caches !== 'undefined' ? caches.keys().then(function (keys) {
-            return Promise.all(keys.filter(function (k) { return k.indexOf('propertiKu') !== -1; }).map(function (k) { return caches.delete(k); }));
+            return Promise.all(keys.filter(function (k) { return k.indexOf('propertiKu') !== -1 || k.indexOf('landlordKu') !== -1; }).map(function (k) { return caches.delete(k); }));
           }) : Promise.resolve()
         ]).finally(function () {
           location.replace(location.pathname + location.hash);
@@ -45,10 +45,10 @@
     <header class="header">
       <div class="header-brand">
         <svg class="header-logo" width="28" height="28" viewBox="0 0 32 32" fill="none">
-          <path d="M16 2L3 13v15a2 2 0 002 2h8v-9h6v9h8a2 2 0 002-2V13L16 2z" fill="white" opacity="0.9"/>
-          <path d="M16 2L3 13h4l9-7.5L25 13h4L16 2z" fill="white"/>
+          <path d="M16 2L3 13v15a2 2 0 002 2h8v-9h6v9h8a2 2 0 002-2V13L16 2z" fill="currentColor" opacity="0.9"/>
+          <path d="M16 2L3 13h4l9-7.5L25 13h4L16 2z" fill="currentColor"/>
         </svg>
-        <h1 id="page-title">PropertiKu</h1>
+        <h1 id="page-title">LandlordKu</h1>
       </div>
       <div class="header-actions" id="header-actions">
       <div class="lang-toggle" role="group" aria-label="Language" data-i18n-title="lang.choose" title="Bahasa">
@@ -67,7 +67,10 @@
       <section id="page-dashboard" class="page active">
         <div id="greeting-container"></div>
         <div class="card dash-biz-cal-card" id="dash-biz-cal">
-          <h3 class="card-title" data-i18n="dash.bizCal">📅 Kalender bisnis</h3>
+          <div class="card-title-row compact-title">
+            <h3 class="card-title" data-i18n="dash.bizCal">📅 Kalender bisnis</h3>
+            <button type="button" class="help-dot" onclick="openHelpSheet('calendar')" aria-label="Info kalender bisnis">?</button>
+          </div>
           <p class="dash-biz-cal-hint" data-i18n="dash.bizCalHint">Kontrak · PBB · izin yang mendekat.</p>
           <div id="dashboard-business-calendar" class="list-container"></div>
         </div>
@@ -149,7 +152,10 @@
       <!-- Reports Page (Yield + Analytics + Multi-property) -->
       <section id="page-reports" class="page">
         <!-- Sub-tabs for reports -->
-        <p class="reports-simple-tip" data-i18n-html="reports.simpleTip">Versi sederhana: ringkasan keuangan saja. Untuk analisis sewa + kenaikan harga, KPR, dan grafik, buka <strong>Pengaturan → Pro</strong>.</p>
+        <aside class="reports-simple-tip" role="note">
+          <span class="reports-simple-tip__badge" data-i18n="reports.simpleTipTitle">Mode sederhana</span>
+          <p class="reports-simple-tip__text" data-i18n-html="reports.simpleTipBody">Di halaman ini hanya ringkasan keuangan. Untuk analisis sewa, KPR, dan grafik, buka <strong>Pengaturan → Pro</strong>.</p>
+        </aside>
         <div class="filter-tabs ui-pro-only">
           <button type="button" class="filter-tab active" data-report-tab="overview" onclick="switchReportTab('overview', this)" data-i18n="rpt.overview">Ringkasan</button>
           <button type="button" class="filter-tab" data-report-tab="yield" onclick="switchReportTab('yield', this)" data-i18n="rpt.yield">Yield</button>
@@ -296,20 +302,34 @@
         <div id="modal-body" class="modal-body"></div>
       </div>
     </div>
+
+    <!-- Context Help Bottom Sheet -->
+    <div id="help-sheet-overlay" class="sheet-overlay" onclick="closeHelpSheet()" aria-hidden="true">
+      <aside class="help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-sheet-title" onclick="event.stopPropagation()">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-header">
+          <h3 id="help-sheet-title">Info</h3>
+          <button class="sheet-close" type="button" onclick="closeHelpSheet()" aria-label="Tutup">×</button>
+        </div>
+        <div id="help-sheet-body" class="sheet-body"></div>
+      </aside>
+    </div>
   </div>
 
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- billingPromoCodes: string array; localhost also accepts PK-LOCAL-PRO for dev -->
   <script>
-    window.PROPERTIKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production' };
+    window.LANDLORDKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production', billingPromoCodes: [] };
+    window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
   </script>
-  <script src="analytics.js?v=55"></script>
-  <script src="i18n.js?v=55"></script>
-  <script src="app.js?v=55"></script>
+  <script src="analytics.js?v=71"></script>
+  <script src="i18n.js?v=71"></script>
+  <script src="app.js?v=71"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=55').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=71').then((reg) => {
         reg.update();
         console.log('SW registered:', reg.scope);
       }).catch((err) => {

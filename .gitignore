@@ -6,3 +6,5 @@
 debug-*.log
 propertiKu-backup*.json
 graphify-out/
+node_modules/
+www/

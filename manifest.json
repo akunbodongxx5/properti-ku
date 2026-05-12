@@ -1,6 +1,6 @@
 {
-  "name": "PropertiKu",
-  "short_name": "PropertiKu",
+  "name": "LandlordKu",
+  "short_name": "LandlordKu",
   "description": "Kelola unit, penyewa, pembayaran, dan cashflow properti sewaan — PWA ringan, data di perangkat Anda.",
   "start_url": "./index.html",
   "display": "standalone",

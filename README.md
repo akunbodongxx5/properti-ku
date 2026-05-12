@@ -1,4 +1,4 @@
-# PropertiKu
+# LandlordKu
 
 Aplikasi web (PWA) untuk mengelola properti sewaan: unit, penyewa, pembayaran, dan laporan.
 
@@ -29,26 +29,52 @@ Butuh server HTTP statis (bukan `file://`) agar Service Worker dan fitur yang me
 
 | Versi | Branch | Server lokal | Preview |
 |--------|--------|----------------|---------|
-| **Raw** (kode di `main` ini) | `main` | [`serve.bat`](serve.bat) atau [`server.ps1`](server.ps1) — port default **61036** | [http://localhost:61036/](http://localhost:61036/) |
-| **Monetized (eksperimental)** | `experiment/monetization` | Di checkout branch itu, jalankan [`serve-experiment.bat`](serve-experiment.bat) (`PORT=61037`) | [http://localhost:61037/](http://localhost:61037/) |
+| **Raw / stabil** | `main` | [`serve.bat`](serve.bat) atau [`server.ps1`](server.ps1) — port default **61036** | [http://localhost:61036/](http://localhost:61036/) |
+| **Monetized (eksperimental)** | `experiment/monetization` | Di checkout branch itu: [`serve-experiment.bat`](serve-experiment.bat) (`PORT=61037`) + [`server.ps1`](server.ps1) | [http://localhost:61037/](http://localhost:61037/) |
 
-**Dua server sekaligus:** pakai [git worktree](https://git-scm.com/docs/git-worktree) supaya dua folder & dua branch; jalankan `serve.bat` di satu folder dan `serve-experiment.bat` di worktree branch eksperimen. Lihat [`docs/experiments/monetization-branch.md`](docs/experiments/monetization-branch.md).
+**Dua server sekaligus:** [git worktree](https://git-scm.com/docs/git-worktree) — dua folder & dua branch. Rinci: [`docs/experiments/monetization-branch.md`](docs/experiments/monetization-branch.md).
 
-**Fork di GitHub:** setelah `git push -u origin experiment/monetization`, buat PR dari branch itu atau biarkan sebagai branch paralel.
+```powershell
+git fetch origin
+git worktree add ..\properti-ku-monetization experiment/monetization
+# Folder ini (main): serve.bat — worktree: serve-experiment.bat
+```
+
+**Fork / remote:** `git push -u origin experiment/monetization`, lalu buat PR jika perlu.
 
 ```bash
-# Contoh Python (port bebas)
+# Alternatif (Python)
 python -m http.server 8080
 ```
 
-Buka `http://localhost:8080` jika memakai contoh di atas.
+Buka [http://localhost:8080/](http://localhost:8080/) jika memakai contoh di atas.
+
+### GitHub Pages (dua URL)
+
+Workflow Actions mendorong branch **`gh-pages`**: `main` ke **root**, `experiment/monetization` ke subfolder **`/experiment/`** (tanpa menimpa stabil).
+
+| Lingkungan | URL (ganti `akunbodongxx5` jika beda) |
+|------------|----------------------------------------|
+| Stabil (setelah workflow `main` jalan) | `https://akunbodongxx5.github.io/properti-ku/` |
+| Eksperimen / monetization | `https://akunbodongxx5.github.io/properti-ku/experiment/` |
+
+**Setup sekali di GitHub**
+
+1. **Settings → Actions → General → Workflow permissions** → **Read and write** (agar workflow bisa push ke `gh-pages`).
+2. **Settings → Pages → Build and deployment → Source:** pilih branch **`gh-pages`**, folder **`/ (root)`** — **bukan** branch `main`.  
+   Selama Pages masih dari **`main`**, URL **`/experiment/` akan 404** walaupun folder itu sudah ada di branch `gh-pages` (GitHub hanya melayani satu sumber).
+
+**Urutan deploy**
+
+- Workflow **experiment** mengisi `gh-pages/experiment/` (saat push ke `experiment/monetization`).
+- Workflow **main** mengisi **root** `gh-pages/` (saat push ke `main`). Tanpa itu, setelah Pages pindah ke `gh-pages`, root `/` bisa 404 sampai workflow **Pages — main** pernah sukses sekali.
 
 ## Deploy
 
 1. Unggah isi repo ke hosting statis (GitHub Pages, Netlify, VPS + nginx, dll.).
 2. **Setelah mengubah** `app.js`, `i18n.js`, atau `styles.css`, naikkan versi cache:
    - Di [`index.html`](index.html): query string `?v=` pada skrip dan stylesheet (mis. `?v=28`).
-   - Di [`sw.js`](sw.js): `CACHE_NAME` (mis. `propertiKu-v28`) dan string `?v=` di array `ASSETS`.
+   - Di [`sw.js`](sw.js): `CACHE_NAME` (mis. `landlordKu-v66`) dan string `?v=` di array `ASSETS`.
 3. Pengguna yang sudah pernah membuka app mungkin perlu **hard refresh** atau menutup tab agar bundle baru terpakai.
 
 ## Kebijakan privasi
@@ -57,15 +83,16 @@ Halaman statis: [`privacy.html`](privacy.html). Tautan dari **Pengaturan** di da
 
 ## Analytics & error monitoring (opsional)
 
-Di [`index.html`](index.html), objek `window.PROPERTIKU_CONFIG` dapat diisi:
+Di [`index.html`](index.html), objek `window.LANDLORDKU_CONFIG` dapat diisi (alias `window.PROPERTIKU_CONFIG` tetap didukung):
 
 ```html
 <script>
-window.PROPERTIKU_CONFIG = {
+window.LANDLORDKU_CONFIG = {
   ga4MeasurementId: '',  // mis. G-XXXXXXXX
   sentryDsn: '',         // dari Sentry SDK
   environment: 'production'
 };
+window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
 </script>
 ```
 

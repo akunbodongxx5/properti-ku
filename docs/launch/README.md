@@ -1,4 +1,4 @@
-# Dokumentasi launch PropertiKu
+# Dokumentasi launch LandlordKu
 
 | File | Isi |
 |------|-----|

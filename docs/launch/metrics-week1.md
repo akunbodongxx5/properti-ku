@@ -1,4 +1,4 @@
-# Metrik minggu pertama — PropertiKu
+# Metrik minggu pertama — LandlordKu
 
 Definisi harus diputuskan sebelum mengukur (satu sumber kebenaran di analytics).
 
