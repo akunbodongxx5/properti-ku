@@ -1,0 +1,16 @@
+{
+  "name": "landlord-ku",
+  "private": true,
+  "version": "1.0.0",
+  "description": "LandlordKu — tooling npm (Capacitor / build web).",
+  "scripts": {
+    "cap:build-web": "node scripts/build-capacitor-web.js",
+    "cap:sync": "npm run cap:build-web && cap sync android",
+    "cap:open": "npm run cap:sync && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.3",
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/core": "^8.3.3"
+  }
+}

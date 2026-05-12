@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="id" data-locale="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d9488">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title data-i18n="meta.title">LandlordKu — Manajemen Properti Sewa</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=71">
+</head>
+<body>
+  <script>
+  (function () {
+    try {
+      if (/[?&]clearcache=1(?:&|$)/.test(location.search) && 'serviceWorker' in navigator) {
+        Promise.all([
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }),
+          typeof caches !== 'undefined' ? caches.keys().then(function (keys) {
+            return Promise.all(keys.filter(function (k) { return k.indexOf('propertiKu') !== -1 || k.indexOf('landlordKu') !== -1; }).map(function (k) { return caches.delete(k); }));
+          }) : Promise.resolve()
+        ]).finally(function () {
+          location.replace(location.pathname + location.hash);
+        });
+        return;
+      }
+    } catch (e) { /* ignore */ }
+  })();
+  </script>
+  <script>
+    try {
+      var _um = localStorage.getItem('propertiKu_ui_mode');
+      document.body.dataset.uiMode = (_um === 'simple' || _um === 'pro') ? _um : 'pro';
+    } catch (e) { document.body.dataset.uiMode = 'pro'; }
+  </script>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <svg class="header-logo" width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <path d="M16 2L3 13v15a2 2 0 002 2h8v-9h6v9h8a2 2 0 002-2V13L16 2z" fill="currentColor" opacity="0.9"/>
+          <path d="M16 2L3 13h4l9-7.5L25 13h4L16 2z" fill="currentColor"/>
+        </svg>
+        <h1 id="page-title">LandlordKu</h1>
+      </div>
+      <div class="header-actions" id="header-actions">
+      <div class="lang-toggle" role="group" aria-label="Language" data-i18n-title="lang.choose" title="Bahasa">
+        <button type="button" class="lang-seg" id="lang-en" data-lang="en" data-i18n-title="lang.enTitle" title="English" onclick="setLocale('en')" aria-pressed="false">EN</button>
+        <button type="button" class="lang-seg lang-seg-active" id="lang-id" data-lang="id" data-i18n-title="lang.idTitle" title="Bahasa Indonesia" onclick="setLocale('id')" aria-pressed="true">ID</button>
+      </div>
+      <button class="btn-icon" id="btn-settings" onclick="showSettings()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+      </div>
+    </header>
+
+    <!-- Pages -->
+    <main class="main">
+      <!-- Dashboard Page -->
+      <section id="page-dashboard" class="page active">
+        <div id="greeting-container"></div>
+        <div class="card dash-biz-cal-card" id="dash-biz-cal">
+          <div class="card-title-row compact-title">
+            <h3 class="card-title" data-i18n="dash.bizCal">📅 Kalender bisnis</h3>
+            <button type="button" class="help-dot" onclick="openHelpSheet('calendar')" aria-label="Info kalender bisnis">?</button>
+          </div>
+          <p class="dash-biz-cal-hint" data-i18n="dash.bizCalHint">Kontrak · PBB · izin yang mendekat.</p>
+          <div id="dashboard-business-calendar" class="list-container"></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" id="dash-cf-title" data-i18n="dash.cfPro">Cashflow Bulan Ini</h3>
+          <div class="cashflow-summary">
+            <div class="cashflow-item income">
+              <span class="cashflow-label"><span class="dot"></span> <span data-i18n="dash.income">Pemasukan</span></span>
+              <span class="cashflow-value" id="cf-income">Rp 0</span>
+            </div>
+            <div class="cashflow-item expense">
+              <span class="cashflow-label"><span class="dot"></span> <span data-i18n="dash.expense">Pengeluaran</span></span>
+              <span class="cashflow-value" id="cf-expense">Rp 0</span>
+            </div>
+            <div class="cashflow-divider"></div>
+            <div class="cashflow-item net">
+              <span class="cashflow-label"><span class="dot"></span> <span data-i18n="dash.net">Net Profit</span></span>
+              <span class="cashflow-value" id="cf-net">Rp 0</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" data-i18n="dash.upcoming">Tagihan Mendatang</h3>
+          <div id="upcoming-dues" class="list-container">
+            <p class="empty-state" data-i18n="dash.upcomingEmpty">Belum ada data pembayaran</p>
+          </div>
+          <div id="reminder-tools" class="reminder-tools" hidden></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" data-i18n="dash.properties">Properti Saya</h3>
+          <div id="dashboard-properties" class="list-container">
+            <p class="empty-state" data-i18n="dash.propertiesEmpty">Belum ada properti</p>
+          </div>
+        </div>
+        <div class="card ui-pro-only">
+          <h3 class="card-title" data-i18n="dash.roi">ROI per Properti</h3>
+          <div id="dashboard-roi" class="list-container">
+            <p class="empty-state" data-i18n="dash.propertiesEmpty">Belum ada properti</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tenants Page -->
+      <section id="page-tenants" class="page">
+        <div class="search-bar">
+          <input type="text" data-i18n-placeholder="search.tenant" placeholder="Cari penyewa..." id="search-tenant" oninput="renderTenants()">
+        </div>
+        <div id="tenant-list" class="list-container"></div>
+      </section>
+
+      <!-- Payments Page -->
+      <section id="page-payments" class="page">
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="filterPayments('all', this)" data-i18n="pay.all">Semua</button>
+          <button class="filter-tab" onclick="filterPayments('pending', this)" data-i18n="pay.pending">Belum Bayar</button>
+          <button class="filter-tab" onclick="filterPayments('paid', this)" data-i18n="pay.paid">Lunas</button>
+          <button class="filter-tab" onclick="filterPayments('overdue', this)" data-i18n="pay.overdue">Nunggak</button>
+        </div>
+        <div class="filter-tabs sub-filter payment-view-tabs">
+          <button type="button" class="filter-tab active" data-pay-view="timeline" onclick="setPaymentViewMode('timeline', this)" data-i18n="pay.timeline">Urut tanggal</button>
+          <button type="button" class="filter-tab" data-pay-view="byTenant" onclick="setPaymentViewMode('byTenant', this)" data-i18n="pay.byTenant">Per penyewa</button>
+        </div>
+        <div id="payment-list" class="list-container"></div>
+      </section>
+
+      <!-- Units Page -->
+      <section id="page-units" class="page">
+        <div class="search-bar">
+          <input type="text" data-i18n-placeholder="search.unit" placeholder="Cari unit... (misal: 301, Deluxe)" id="search-unit" oninput="renderUnits()">
+        </div>
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="filterUnits('all', this)" data-i18n="unit.all">Semua</button>
+          <button class="filter-tab" onclick="filterUnits('occupied', this)" data-i18n="unit.occupied">Terisi</button>
+          <button class="filter-tab" onclick="filterUnits('vacant', this)" data-i18n="unit.vacant">Kosong</button>
+        </div>
+        <div id="unit-list" class="list-container"></div>
+      </section>
+
+      <!-- Reports Page (Yield + Analytics + Multi-property) -->
+      <section id="page-reports" class="page">
+        <!-- Sub-tabs for reports -->
+        <aside class="reports-simple-tip" role="note">
+          <span class="reports-simple-tip__badge" data-i18n="reports.simpleTipTitle">Mode sederhana</span>
+          <p class="reports-simple-tip__text" data-i18n-html="reports.simpleTipBody">Di halaman ini hanya ringkasan keuangan. Untuk analisis sewa, KPR, dan grafik, buka <strong>Pengaturan → Pro</strong>.</p>
+        </aside>
+        <div class="filter-tabs ui-pro-only">
+          <button type="button" class="filter-tab active" data-report-tab="overview" onclick="switchReportTab('overview', this)" data-i18n="rpt.overview">Ringkasan</button>
+          <button type="button" class="filter-tab" data-report-tab="yield" onclick="switchReportTab('yield', this)" data-i18n="rpt.yield">Yield</button>
+          <button type="button" class="filter-tab" data-report-tab="proyeksi" onclick="switchReportTab('proyeksi', this)" data-i18n="rpt.projection">Proyeksi</button>
+          <button type="button" class="filter-tab" data-report-tab="stress" onclick="switchReportTab('stress', this)" data-i18n="rpt.stress">Simulasi risiko</button>
+          <button type="button" class="filter-tab" data-report-tab="analytics" onclick="switchReportTab('analytics', this)" data-i18n="rpt.occupancy">Okupansi</button>
+          <button type="button" class="filter-tab" data-report-tab="multi" onclick="switchReportTab('multi', this)" data-i18n="rpt.byProperty">Per Properti</button>
+          <button type="button" class="filter-tab" data-report-tab="kpr" onclick="switchReportTab('kpr', this)" data-i18n="rpt.kpr">KPR</button>
+          <button type="button" class="filter-tab" data-report-tab="charts" onclick="switchReportTab('charts', this)" data-i18n="rpt.charts">Grafik</button>
+          <button type="button" class="filter-tab" data-report-tab="insight" onclick="switchReportTab('insight', this)" data-i18n="rpt.ops">Operasional</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="rpt-tab-overview" class="rpt-tab active">
+          <div class="filter-tabs sub-filter">
+            <button class="filter-tab active" onclick="changeReportPeriod('month', this)" data-i18n="rpt.monthly">Bulanan</button>
+            <button class="filter-tab" onclick="changeReportPeriod('year', this)" data-i18n="rpt.yearly">Tahunan</button>
+          </div>
+          <div class="card">
+            <div class="card-title-row">
+              <h3 class="card-title" data-i18n="rpt.finSummary">Ringkasan Keuangan</h3>
+              <div class="rpt-export-group">
+                <button type="button" class="btn btn-outline rpt-export-btn" onclick="exportOverviewReportCsv()" data-i18n="rpt.exportCsvTax">CSV</button>
+                <button type="button" class="btn btn-outline rpt-export-btn" onclick="exportOverviewReportPdf()" data-i18n="rpt.exportPdf">PDF</button>
+              </div>
+            </div>
+            <div class="report-grid">
+              <div class="report-item"><span class="report-label" data-i18n="rpt.income">Pemasukan</span><span class="report-value income" id="rpt-income">Rp 0</span></div>
+              <div class="report-item"><span class="report-label" data-i18n="rpt.expense">Pengeluaran</span><span class="report-value expense" id="rpt-expense">Rp 0</span></div>
+              <div class="report-item"><span class="report-label" data-i18n="rpt.net">Net Profit</span><span class="report-value" id="rpt-net">Rp 0</span></div>
+              <div class="report-item ui-pro-only"><span class="report-label"><span data-i18n="rpt.yieldBuy">Yield sewa</span> <span class="report-label-sub" data-i18n="rpt.vsBuy">(vs harga beli)</span></span><span class="report-value" id="rpt-yield">-</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 class="card-title" data-i18n="rpt.plByProp">P&L Per Properti</h3>
+            <div id="report-per-property" class="list-container"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title" data-i18n="rpt.txHistory">Riwayat Transaksi</h3>
+            <div id="report-transactions" class="list-container"></div>
+          </div>
+        </div>
+
+        <!-- Yield Tab -->
+        <div id="rpt-tab-yield" class="rpt-tab">
+          <div id="yield-content"></div>
+        </div>
+
+        <!-- Proyeksi Tab -->
+        <div id="rpt-tab-proyeksi" class="rpt-tab">
+          <div id="proyeksi-content"></div>
+        </div>
+
+        <!-- Occupancy Analytics Tab -->
+        <div id="rpt-tab-analytics" class="rpt-tab">
+          <div id="analytics-content"></div>
+        </div>
+
+        <!-- Multi-property Tab -->
+        <div id="rpt-tab-multi" class="rpt-tab">
+          <div id="multi-content"></div>
+        </div>
+
+        <!-- KPR Simulator Tab -->
+        <div id="rpt-tab-kpr" class="rpt-tab">
+          <div id="kpr-content"></div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div id="rpt-tab-charts" class="rpt-tab">
+        </div>
+
+        <div id="rpt-tab-stress" class="rpt-tab">
+          <div id="stress-content"></div>
+        </div>
+
+        <div id="rpt-tab-insight" class="rpt-tab">
+          <div id="insight-content"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- FAB -->
+    <button class="fab" id="fab-main" onclick="toggleFabMenu()">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="fab-menu" id="fab-menu">
+      <button class="fab-option" onclick="showUnitForm(); closeFabMenu()">
+        <span class="fab-option-icon">🏠</span>
+        <span class="fab-option-label" data-i18n="fab.addUnit">Tambah Unit</span>
+      </button>
+      <button class="fab-option" onclick="showTenantForm(); closeFabMenu()">
+        <span class="fab-option-icon">👤</span>
+        <span class="fab-option-label" data-i18n="fab.addTenant">Tambah Penyewa</span>
+      </button>
+      <button class="fab-option" onclick="showPaymentForm(); closeFabMenu()">
+        <span class="fab-option-icon">💰</span>
+        <span class="fab-option-label" data-i18n="fab.addPayment">Catat Pembayaran</span>
+      </button>
+      <button class="fab-option" onclick="showExpenseForm(); closeFabMenu()">
+        <span class="fab-option-icon">💸</span>
+        <span class="fab-option-label" data-i18n="fab.addExpense">Catat Pengeluaran</span>
+      </button>
+      <button class="fab-option ui-pro-only" onclick="showMaintenanceForm(); closeFabMenu()">
+        <span class="fab-option-icon">🔧</span>
+        <span class="fab-option-label" data-i18n="fab.ticket">Tiket perbaikan</span>
+      </button>
+    </div>
+    <div class="fab-backdrop" id="fab-backdrop" onclick="closeFabMenu()"></div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="navigateTo('dashboard', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span data-i18n="nav.home">Home</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('units', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span data-i18n="nav.units">Unit</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('payments', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span data-i18n="nav.payments">Bayar</span>
+      </button>
+      <button class="nav-item" onclick="navigateTo('tenants', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span data-i18n="nav.tenants">Penyewa</span>
+      </button>
+      <button type="button" class="nav-item" id="nav-reports-btn" onclick="navigateTo('reports', this)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span id="nav-reports-label">Laporan</span>
+      </button>
+    </nav>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3 id="modal-title">Form</h3>
+          <button class="btn-icon" onclick="closeModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Context Help Bottom Sheet -->
+    <div id="help-sheet-overlay" class="sheet-overlay" onclick="closeHelpSheet()" aria-hidden="true">
+      <aside class="help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-sheet-title" onclick="event.stopPropagation()">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-header">
+          <h3 id="help-sheet-title">Info</h3>
+          <button class="sheet-close" type="button" onclick="closeHelpSheet()" aria-label="Tutup">×</button>
+        </div>
+        <div id="help-sheet-body" class="sheet-body"></div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- billingPromoCodes: string array; localhost also accepts PK-LOCAL-PRO for dev -->
+  <script>
+    window.LANDLORDKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production', billingPromoCodes: [] };
+    window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
+  </script>
+  <script src="analytics.js?v=71"></script>
+  <script src="i18n.js?v=71"></script>
+  <script src="app.js?v=71"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js?v=71').then((reg) => {
+        reg.update();
+        console.log('SW registered:', reg.scope);
+      }).catch((err) => {
+        console.log('SW registration failed:', err);
+        document.dispatchEvent(new CustomEvent('sw-register-failed', { detail: { message: err && err.message } }));
+      });
+    }
+  </script>
+</body>
+</html>

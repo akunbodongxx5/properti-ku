@@ -1,0 +1,10 @@
+.claude/
+# Keep shared Cursor rules (e.g. Graphify); ignore other local Cursor state
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+debug-*.log
+propertiKu-backup*.json
+graphify-out/
+node_modules/
+www/
