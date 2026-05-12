@@ -1,4 +1,4 @@
-# PropertiKu
+# LandlordKu
 
 Aplikasi web (PWA) untuk mengelola properti sewaan: unit, penyewa, pembayaran, dan laporan.
 
@@ -56,7 +56,7 @@ Buka [http://localhost:8080/](http://localhost:8080/) jika memakai contoh di ata
 1. Unggah isi repo ke hosting statis (GitHub Pages, Netlify, VPS + nginx, dll.).
 2. **Setelah mengubah** `app.js`, `i18n.js`, atau `styles.css`, naikkan versi cache:
    - Di [`index.html`](index.html): query string `?v=` pada skrip dan stylesheet (mis. `?v=28`).
-   - Di [`sw.js`](sw.js): `CACHE_NAME` (mis. `propertiKu-v28`) dan string `?v=` di array `ASSETS`.
+   - Di [`sw.js`](sw.js): `CACHE_NAME` (mis. `landlordKu-v66`) dan string `?v=` di array `ASSETS`.
 3. Pengguna yang sudah pernah membuka app mungkin perlu **hard refresh** atau menutup tab agar bundle baru terpakai.
 
 ## Kebijakan privasi
@@ -65,15 +65,16 @@ Halaman statis: [`privacy.html`](privacy.html). Tautan dari **Pengaturan** di da
 
 ## Analytics & error monitoring (opsional)
 
-Di [`index.html`](index.html), objek `window.PROPERTIKU_CONFIG` dapat diisi:
+Di [`index.html`](index.html), objek `window.LANDLORDKU_CONFIG` dapat diisi (alias `window.PROPERTIKU_CONFIG` tetap didukung):
 
 ```html
 <script>
-window.PROPERTIKU_CONFIG = {
+window.LANDLORDKU_CONFIG = {
   ga4MeasurementId: '',  // mis. G-XXXXXXXX
   sentryDsn: '',         // dari Sentry SDK
   environment: 'production'
 };
+window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
 </script>
 ```
 

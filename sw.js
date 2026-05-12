@@ -1,12 +1,12 @@
-// Bump this + query ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
-const CACHE_NAME = 'propertiKu-v60';
+// Bump CACHE_NAME + ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
+const CACHE_NAME = 'landlordKu-v71';
 const ASSETS = [
   // Jangan precache index.html — mengurangi shell HTML usang di cache; navigasi tetap network-first.
   './privacy.html',
-  './analytics.js?v=60',
-  './i18n.js?v=60',
-  './app.js?v=60',
-  './styles.css?v=60',
+  './analytics.js?v=71',
+  './i18n.js?v=71',
+  './app.js?v=71',
+  './styles.css?v=71',
   './manifest.json',
   './icon.svg',
   './icon-192.png',

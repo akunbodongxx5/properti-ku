@@ -1,4 +1,4 @@
-# Static file server for PropertiKu (PWA needs http://, not file://)
+# Static file server for LandlordKu (PWA needs http://, not file://)
 $preferredPort = 61036
 if ($env:PORT -match '^\d+$') { $preferredPort = [int]$env:PORT }
 
@@ -68,7 +68,7 @@ if ($port -ne $preferredPort) {
 }
 
 Write-Host ""
-Write-Host " PropertiKu - server aktif" -ForegroundColor Green
+Write-Host " LandlordKu - server aktif" -ForegroundColor Green
 Write-Host "   http://localhost:$port/" -ForegroundColor White
 Write-Host "   http://127.0.0.1:$port/" -ForegroundColor White
 Write-Host ""

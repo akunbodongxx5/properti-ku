@@ -1,4 +1,4 @@
-# QA matrix — PropertiKu (P0 / smoke)
+# QA matrix — LandlordKu (P0 / smoke)
 
 Lingkungan: Chrome Android + Safari iOS, HTTPS atau `http://localhost`, bukan `file://` untuk SW/Telegram.
 

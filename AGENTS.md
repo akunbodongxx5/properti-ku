@@ -1,9 +1,9 @@
-# PropertiKu — petunjuk agen (Cursor / AI)
+# LandlordKu — petunjuk agen (Cursor / AI)
 
 ## Arsitektur singkat
 
 - **Frontend statis + PWA**: `index.html`, `styles.css`, `app.js` (logika utama), `i18n.js` (string), `sw.js` (cache), `manifest.json`.
-- **Data**: `localStorage` prefix `propertiKu_*` (lihat `DB` di `app.js`).
+- **Data**: `localStorage` prefix legacy `propertiKu_*` (nama app: LandlordKu; lihat `DB` di `app.js`).
 - **Lokal**: butuh server HTTP (bukan `file://`); lihat `README.md`.
 
 ## Graphify (konteks codebase)

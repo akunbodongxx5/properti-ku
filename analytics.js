@@ -1,10 +1,11 @@
 /**
  * Optional: Google Analytics 4 + Sentry (browser).
- * Set IDs in index.html: window.PROPERTIKU_CONFIG = { ga4MeasurementId: 'G-XXX', sentryDsn: 'https://...' }
+ * Set IDs in index.html: window.LANDLORDKU_CONFIG = { ga4MeasurementId: 'G-XXX', sentryDsn: 'https://...' }
+ * (window.PROPERTIKU_CONFIG is still supported as an alias.)
  * Leave empty to disable (no network calls).
  */
 (function () {
-  var cfg = window.PROPERTIKU_CONFIG || {};
+  var cfg = window.LANDLORDKU_CONFIG || window.PROPERTIKU_CONFIG || {};
   var gaId = (cfg.ga4MeasurementId || '').trim();
   var dsn = (cfg.sentryDsn || '').trim();
   if (!gaId && !dsn) return;
