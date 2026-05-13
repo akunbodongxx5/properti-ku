@@ -1,12 +1,12 @@
 // Bump CACHE_NAME + ?v= in index.html when shipping JS/CSS changes (avoids stale PWA/browser cache).
-const CACHE_NAME = 'landlordKu-v72';
+const CACHE_NAME = 'landlordKu-v73';
 const ASSETS = [
   // Jangan precache index.html — mengurangi shell HTML usang di cache; navigasi tetap network-first.
   './privacy.html',
-  './analytics.js?v=72',
-  './i18n.js?v=72',
-  './app.js?v=72',
-  './styles.css?v=72',
+  './analytics.js?v=73',
+  './i18n.js?v=73',
+  './app.js?v=73',
+  './styles.css?v=73',
   './manifest.json',
   './icon.svg',
   './icon-192.png',
