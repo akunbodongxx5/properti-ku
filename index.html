@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=71">
+  <link rel="stylesheet" href="styles.css?v=72">
 </head>
 <body>
   <script>
@@ -319,17 +319,22 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- billingPromoCodes: string array; localhost also accepts PK-LOCAL-PRO for dev -->
+  <!-- billingPromoCodes: daftar kode aktivasi Pro (GitHub Pages / produksi). Localhost tetap dapat PK-LOCAL-PRO dari app.js. -->
   <script>
-    window.LANDLORDKU_CONFIG = { ga4MeasurementId: '', sentryDsn: '', environment: 'production', billingPromoCodes: [] };
+    window.LANDLORDKU_CONFIG = {
+      ga4MeasurementId: '',
+      sentryDsn: '',
+      environment: 'production',
+      billingPromoCodes: ['Lardlordku-12345679']
+    };
     window.PROPERTIKU_CONFIG = window.LANDLORDKU_CONFIG;
   </script>
-  <script src="analytics.js?v=71"></script>
-  <script src="i18n.js?v=71"></script>
-  <script src="app.js?v=71"></script>
+  <script src="analytics.js?v=72"></script>
+  <script src="i18n.js?v=72"></script>
+  <script src="app.js?v=72"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=71').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=72').then((reg) => {
         reg.update();
         console.log('SW registered:', reg.scope);
       }).catch((err) => {
